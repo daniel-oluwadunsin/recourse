@@ -72,19 +72,53 @@ export class HttpErrorFilter implements ExceptionFilter {
     const validationMessages = responseRecord?.message;
     const isValidationError =
       status === HttpStatus.BAD_REQUEST && Array.isArray(validationMessages);
+    const code = this.errorCodeForStatus(status, isValidationError);
 
     return {
-      code: isValidationError
-        ? "VALIDATION_ERROR"
-        : status === HttpStatus.NOT_FOUND
-          ? "NOT_FOUND"
-          : "BAD_REQUEST",
+      code,
       message: isValidationError
         ? "Request validation failed."
-        : typeof responseRecord?.message === "string"
-          ? responseRecord.message
-          : exception.message,
+        : status >= 500
+          ? "Service unavailable."
+          : typeof responseRecord?.message === "string"
+            ? responseRecord.message
+            : exception.message,
       details: isValidationError ? { issues: validationMessages } : {},
     };
+  }
+
+  private errorCodeForStatus(
+    status: number,
+    isValidationError: boolean,
+  ): ApiErrorCode {
+    if (isValidationError) {
+      return "VALIDATION_ERROR";
+    }
+
+    if (status === HttpStatus.UNAUTHORIZED) {
+      return "UNAUTHORIZED";
+    }
+
+    if (status === HttpStatus.FORBIDDEN) {
+      return "FORBIDDEN";
+    }
+
+    if (status === HttpStatus.CONFLICT) {
+      return "CONFLICT";
+    }
+
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      return "TOO_MANY_REQUESTS";
+    }
+
+    if (status === HttpStatus.NOT_FOUND) {
+      return "NOT_FOUND";
+    }
+
+    if (status >= 500) {
+      return "SERVICE_UNAVAILABLE";
+    }
+
+    return "BAD_REQUEST";
   }
 }

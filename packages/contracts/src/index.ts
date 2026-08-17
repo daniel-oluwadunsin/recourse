@@ -2,8 +2,13 @@ import { z } from "zod";
 
 export const apiErrorCodeSchema = z.enum([
   "BAD_REQUEST",
+  "CONFLICT",
+  "FORBIDDEN",
+  "TOO_MANY_REQUESTS",
+  "UNAUTHORIZED",
   "VALIDATION_ERROR",
   "NOT_FOUND",
+  "SERVICE_UNAVAILABLE",
   "INTERNAL_ERROR",
 ]);
 

@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "db:indexes": "pnpm --filter api db:indexes",
     "env:check": "node --env-file=.env --import tsx scripts/verify-env.ts",
     "web:dev": "pnpm --filter web dev",
     "api:dev": "pnpm --filter api... build && pnpm --filter api start:dev",

@@ -8,7 +8,19 @@
       "outputs": ["dist/**", ".next/**", "!.next/cache/**", "!.next/dev/**"]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": ["^lint"],
+      "env": [
+        "APP_ENV",
+        "AUTH_COOKIE_SECURE",
+        "AUTH_RATE_LIMIT_LIMIT",
+        "JWT_ACCESS_SECRET",
+        "JWT_REFRESH_SECRET",
+        "MONGODB_AUTO_INDEX",
+        "MONGODB_DATABASE",
+        "MONGODB_URI",
+        "NODE_ENV",
+        "RATE_LIMIT_STORAGE"
+      ]
     },
     "check-types": {
       "dependsOn": ["^build"]
