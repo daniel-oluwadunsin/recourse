@@ -195,31 +195,28 @@ At the end run all checks, describe the state machine, show the domain models/in
 # Prompt 4 — Object storage and evidence ingestion pipeline
 
 ```text
-Proceed with Phase 4 only: implement production-grade file/evidence storage and document ingestion foundations.
+Proceed with Phase 4 only: implement production-grade file/evidence storage and document ingestion foundations using **Cloudinary** for object/file storage.
 
 Implement:
-- StorageProvider interface.
-- real S3-compatible provider implementation suitable for Cloudflare R2 or AWS S3 via environment configuration.
-- private-bucket design, short-lived presigned upload/download URLs, opaque storage keys.
-- upload-intent and upload-completion endpoints.
-- file size/MIME/extension validation and configurable limits.
-- Evidence and EvidenceBlock models/indexes.
-- SHA-256 content/integrity handling and duplicate detection.
-- secure deletion lifecycle.
-- processing-status state machine.
-- native text extraction for supported text PDFs, DOCX, EML/MIME, text, and normalized images using maintained packages selected after checking current docs/security.
-- HTML email sanitization/text extraction.
-- page/block provenance.
-- interfaces for a multimodal fallback, but do not integrate Groq vision until the AI phase.
-- clear unsupported/failed-extraction states.
-- object-storage health/live-check script.
-- tests including malicious filename, MIME mismatch, oversized file, duplicate file, ownership, deletion during pending processing, and parser failure.
 
-Do not route large file bytes through memory unnecessarily. Prefer direct object-storage upload.
+* StorageProvider interface with a real Cloudinary provider configured via environment variables.
+* private/authenticated assets, opaque storage keys, and short-lived signed upload/download access.
+* upload-intent and upload-completion endpoints.
+* file size/MIME/extension validation with configurable limits.
+* Evidence and EvidenceBlock models/indexes.
+* SHA-256 integrity handling and duplicate detection.
+* secure deletion lifecycle and processing-status state machine.
+* native extraction for text PDFs, DOCX, EML/MIME, text, and supported images using maintained packages verified against current docs/security.
+* sanitized HTML email text extraction, page/block provenance, unsupported/failed extraction states.
+* multimodal fallback interfaces only; do not integrate Groq vision yet.
+* Cloudinary health/live-check script.
+* tests for malicious filenames, MIME mismatch, oversized files, duplicates, ownership, deletion during processing, and parser failures.
 
-Do not add a fictional storage service in runtime. Local tests can use a test-only implementation; staging/production must use real object storage and the live provider check.
+Avoid routing large file bytes through application memory where possible; prefer direct Cloudinary uploads.
 
-At completion run checks and tell me exactly how to create/configure the bucket and what env vars are needed. Stop.
+Do not add a fictional runtime storage service. Test-only local mocks are allowed; staging/production must use Cloudinary and pass the live provider check.
+
+At completion, run checks and tell me exactly how to configure Cloudinary and which environment variables are required. Stop.
 ```
 
 ---

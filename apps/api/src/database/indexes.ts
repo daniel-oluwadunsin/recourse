@@ -16,6 +16,23 @@ import {
   AuditLog,
   AuditLogSchema,
 } from "../modules/audit/schemas/audit-log.schema";
+import {
+  CaseEvent,
+  CaseEventSchema,
+} from "../modules/cases/schemas/case-event.schema";
+import { Case, CaseSchema } from "../modules/cases/schemas/case.schema";
+import {
+  Deadline,
+  DeadlineSchema,
+} from "../modules/cases/schemas/deadline.schema";
+import {
+  Decision,
+  DecisionSchema,
+} from "../modules/cases/schemas/decision.schema";
+import {
+  Institution,
+  InstitutionSchema,
+} from "../modules/cases/schemas/institution.schema";
 import { User, UserSchema } from "../modules/users/schemas/user.schema";
 
 const environment = parseEnvironment();
@@ -41,6 +58,27 @@ async function createAndVerifyIndexes(): Promise<void> {
 
   try {
     const definitions = [
+      { collection: "cases", name: Case.name, schema: CaseSchema },
+      {
+        collection: "decisions",
+        name: Decision.name,
+        schema: DecisionSchema,
+      },
+      {
+        collection: "case_events",
+        name: CaseEvent.name,
+        schema: CaseEventSchema,
+      },
+      {
+        collection: "institutions",
+        name: Institution.name,
+        schema: InstitutionSchema,
+      },
+      {
+        collection: "deadlines",
+        name: Deadline.name,
+        schema: DeadlineSchema,
+      },
       { collection: "users", name: User.name, schema: UserSchema },
       {
         collection: "refresh_tokens",

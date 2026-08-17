@@ -40,7 +40,7 @@ The system must provide a durable, auditable, scalable case-processing platform 
 └──────────────┬────────────────┬──────────────┬───────────────┘
                │                │              │
                ▼                ▼              ▼
-       MongoDB Atlas       Redis/BullMQ   S3/R2 Object Store
+       MongoDB Atlas       Redis/BullMQ   cloudinary Store
                │                │              │
                │                ▼              │
                │       ┌────────────────┐      │
@@ -1582,7 +1582,7 @@ GET /api/v1/cases/:id/deadlines
 
 # 28. File/object storage
 
-Use S3-compatible storage.
+Use Cloudinary
 
 Keys:
 
@@ -1773,7 +1773,7 @@ Managed Redis compatible with BullMQ; persistence/high availability chosen accor
 
 ## Object storage
 
-Cloudflare R2 or AWS S3.
+Cloudniray
 
 # 35. Docker/runtime
 
@@ -1953,7 +1953,7 @@ Groups:
 - Groq;
 - Tavily;
 - embeddings if app-managed;
-- S3/R2;
+- Cloudinary;
 - email;
 - Sentry/observability;
 - queue concurrency/rate limits;

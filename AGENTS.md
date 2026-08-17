@@ -96,7 +96,7 @@ Sending emails, submitting cases, filing complaints, or other consequential acti
 - Redis + BullMQ
 - Groq through one provider abstraction
 - Tavily through one retrieval provider abstraction
-- S3-compatible private object storage
+- cloudinary storage
 - SSE for case activity
 - Playwright Test for E2E
 

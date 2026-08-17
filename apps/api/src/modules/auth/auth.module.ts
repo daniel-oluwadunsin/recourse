@@ -19,7 +19,7 @@ import { AuthTokenService } from "./token.service";
 
 @Module({
   controllers: [AuthController],
-  exports: [AccessTokenGuard, AuthService],
+  exports: [AccessTokenGuard, AuthService, JwtModule, UsersModule],
   imports: [
     ConfigModule,
     JwtModule.registerAsync({

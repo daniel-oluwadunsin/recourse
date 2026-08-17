@@ -364,7 +364,7 @@ Keep the boundary explicit:
 | Groq API | Live tests | **Yes** |
 | MongoDB Atlas | Dev/staging | **Yes** |
 | Redis/BullMQ | Dev/staging | **Yes** |
-| S3/R2 | Dev/staging | **Yes** |
+| cloudinary | Dev/staging | **Yes** |
 
 ---
 

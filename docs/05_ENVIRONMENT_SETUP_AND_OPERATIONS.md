@@ -94,8 +94,7 @@ Never use search snippets alone as evidence.
 
 Recommended:
 
-- Cloudflare R2, or
-- AWS S3.
+- Cloudinary
 
 Purpose:
 
@@ -157,7 +156,7 @@ Recommended topology:
 - Nest worker: separate container service;
 - MongoDB Atlas;
 - managed Redis;
-- R2/S3.
+- cloudinary
 
 Potential container hosts can include Fly.io, Render, Railway, Google Cloud Run, AWS ECS, or another production container runtime. Choose based on team account availability and worker/background-process support, not trendiness.
 
@@ -282,7 +281,7 @@ If Atlas automated embeddings are used instead, remove unused secrets and docume
 
 ## 2.8 Object storage
 
-S3-compatible:
+cloudinary:
 
 ```bash
 OBJECT_STORAGE_PROVIDER=s3
