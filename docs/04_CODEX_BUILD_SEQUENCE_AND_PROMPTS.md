@@ -447,6 +447,8 @@ Proceed with Phase 11 only: build the complete production frontend against the r
 No fake data and no hardcoded demo states. Loading/empty/error states must come from real API state.
 
 Build/refine:
+- Implement light and dark mode
+- Logo to use for the app has been added in the public folder
 - polished auth flows;
 - dashboard;
 - case list with filters/status/deadlines;

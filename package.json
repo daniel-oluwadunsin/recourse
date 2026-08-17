@@ -3,18 +3,31 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "pnpm build && turbo run dev",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "typecheck": "turbo run check-types",
+    "check-types": "pnpm typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "env:check": "node --env-file=.env --import tsx scripts/verify-env.ts",
+    "web:dev": "pnpm --filter web dev",
+    "api:dev": "pnpm --filter api... build && pnpm --filter api start:dev",
+    "worker:dev": "pnpm --filter worker... build && pnpm --filter worker start:dev",
+    "web:build": "pnpm --filter web build",
+    "api:build": "pnpm --filter api build",
+    "worker:build": "pnpm --filter worker build"
   },
   "devDependencies": {
-    "prettier": "^3.7.4",
-    "turbo": "^2.10.10",
-    "typescript": "5.9.2"
+    "prettier": "3.9.6",
+    "tsx": "4.23.12",
+    "turbo": "2.10.10",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
   },
   "packageManager": "pnpm@9.0.0",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9.0"
   }
 }
