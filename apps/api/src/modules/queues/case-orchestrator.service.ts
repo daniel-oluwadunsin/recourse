@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { forwardRef, Inject, Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { UnrecoverableError } from "bullmq";
 import { type Model, Types } from "mongoose";
@@ -8,6 +8,7 @@ import {
   type EvidenceProcessingJobPayload,
 } from "@recourse/contracts";
 
+import { CaseStateMachineService } from "../cases/case-state-machine.service";
 import { ActivityPubSubService } from "./activity-pubsub.service";
 import { QUEUE_NAMES, WORKFLOW_VERSION } from "./queue.constants";
 import { QueueProducerService } from "./queue-producer.service";
@@ -17,7 +18,10 @@ import {
   type CaseEventDocument,
 } from "../cases/schemas/case-event.schema";
 import { Case } from "../cases/schemas/case.schema";
+import { Decision } from "../cases/schemas/decision.schema";
 import { Evidence } from "../evidence/schemas/evidence.schema";
+import { hashInput } from "../ai/ai-operation.service";
+import { type ClassifyCaseInput } from "../ai/operation-schemas";
 
 @Injectable()
 export class CaseOrchestratorService {
@@ -27,6 +31,10 @@ export class CaseOrchestratorService {
     private readonly caseEventModel: Model<CaseEvent>,
     @InjectModel(Evidence.name)
     private readonly evidenceModel: Model<Evidence>,
+    @InjectModel(Decision.name)
+    private readonly decisionModel: Model<Decision>,
+    @Inject(forwardRef(() => CaseStateMachineService))
+    private readonly stateMachine: CaseStateMachineService,
     private readonly activityPubSub: ActivityPubSubService,
     private readonly queueProducer: QueueProducerService,
     private readonly workflowDispatch: WorkflowDispatchService,
@@ -54,6 +62,47 @@ export class CaseOrchestratorService {
     }
 
     const scheduled: string[] = [];
+    if (event.type === "CASE_CREATED") {
+      const activeCase = await this.caseModel
+        .findOne({ _id: event.caseId, deletedAt: null })
+        .exec();
+      if (activeCase?.status === "INTAKE") {
+        const transition = await this.stateMachine.transition(
+          activeCase._id.toString(),
+          "CLASSIFYING",
+          {
+            actorId: null,
+            actorType: "SYSTEM",
+            correlationId: event.correlationId ?? undefined,
+          },
+          {
+            expectedCurrent: ["INTAKE"],
+            idempotencyKey: `classifying-${activeCase._id.toString()}-${activeCase.revision}`,
+            payload: { triggerEventId: event._id.toString() },
+          },
+        );
+        await this.scheduleClassification(
+          transition.case,
+          event.correlationId,
+          scheduled,
+        );
+      }
+    }
+    if (
+      event.type === "CASE_STATUS_CHANGED" &&
+      readPayloadString(event, "to") === "CLASSIFYING"
+    ) {
+      const activeCase = await this.caseModel
+        .findOne({ _id: event.caseId, deletedAt: null })
+        .exec();
+      if (activeCase?.status === "CLASSIFYING") {
+        await this.scheduleClassification(
+          activeCase,
+          event.correlationId,
+          scheduled,
+        );
+      }
+    }
     if (event.type === "EVIDENCE_UPLOADED") {
       const evidenceId = readPayloadString(event, "evidenceId");
       if (evidenceId) {
@@ -100,6 +149,44 @@ export class CaseOrchestratorService {
     await this.workflowDispatch.markCompleted(payload.dispatchId);
 
     return { eventType: event.type, scheduled };
+  }
+
+  private async scheduleClassification(
+    activeCase: Case & { _id: Types.ObjectId },
+    correlationId: string | null,
+    scheduled: string[],
+  ): Promise<void> {
+    const decision = await this.decisionModel
+      .findOne({ caseId: activeCase._id })
+      .exec();
+    if (!decision) {
+      return;
+    }
+    const input: ClassifyCaseInput = {
+      caseId: activeCase._id.toString(),
+      decisionDate: decision.decisionDate?.toISOString() ?? null,
+      evidenceRefs: decision.sourceEvidenceId
+        ? [decision.sourceEvidenceId.toString()]
+        : [],
+      institutionName: decision.institutionName,
+      jurisdiction: decision.jurisdiction,
+      notificationDate: decision.notificationDate?.toISOString() ?? null,
+      relationship: decision.relationship,
+      statedReason: decision.statedReason,
+      decisionType: decision.decisionType,
+    };
+    const inputHash = hashInput(input);
+    await this.queueProducer.enqueueAIOperation({
+      caseId: activeCase._id.toString(),
+      correlationId,
+      evidenceId: null,
+      expectedRevision: activeCase.revision,
+      idempotencyKey: `classify-case-${activeCase._id.toString()}-${activeCase.revision}-${inputHash}`,
+      inputHash,
+      operation: "classify-case",
+      workflowVersion: WORKFLOW_VERSION,
+    });
+    scheduled.push(`ai-operations:classify-case:${activeCase._id.toString()}`);
   }
 }
 

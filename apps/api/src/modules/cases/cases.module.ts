@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 
 import { AuthorizationModule } from "../../common/authorization/authorization.module";
@@ -49,7 +49,7 @@ import {
       { name: WorkflowDispatch.name, schema: WorkflowDispatchSchema },
     ]),
     StorageModule,
-    QueuesModule,
+    forwardRef(() => QueuesModule),
   ],
   providers: [
     CaseEventService,

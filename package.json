@@ -14,6 +14,7 @@
     "db:indexes": "pnpm --filter api db:indexes",
     "env:check": "node --env-file=.env --import tsx scripts/verify-env.ts",
     "cloudinary:check": "pnpm --filter @recourse/config build && node --env-file=.env --import tsx scripts/cloudinary-live-check.ts",
+    "groq:check": "pnpm --filter @recourse/config build && node --env-file=.env --import tsx scripts/groq-live-check.ts",
     "web:dev": "pnpm --filter web dev",
     "api:dev": "pnpm --filter api... build && pnpm --filter api start:dev",
     "worker:dev": "pnpm --filter worker... build && pnpm --filter worker start:dev",

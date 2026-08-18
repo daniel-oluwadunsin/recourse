@@ -399,3 +399,31 @@ export const queueFailureMetadataSchema = z.object({
   evidenceId: z.string().nullable(),
 });
 export type QueueFailureMetadata = z.infer<typeof queueFailureMetadataSchema>;
+
+export const aiOperationNameValues = [
+  "classify-case",
+  "extract-document-claims",
+  "extract-timeline-events",
+] as const;
+
+export const aiOperationNameSchema = z.enum(aiOperationNameValues);
+export type AIOperationName = z.infer<typeof aiOperationNameSchema>;
+
+export const aiRunStatusValues = [
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "REJECTED",
+] as const;
+
+export const aiRunStatusSchema = z.enum(aiRunStatusValues);
+export type AIRunStatus = z.infer<typeof aiRunStatusSchema>;
+
+export const aiOperationJobPayloadSchema = queueJobPayloadSchema.extend({
+  operation: aiOperationNameSchema,
+  caseId: z.string().min(1).nullable(),
+  evidenceId: z.string().min(1).nullable(),
+  expectedRevision: z.number().int().nonnegative().nullable(),
+  inputHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type AIOperationJobPayload = z.infer<typeof aiOperationJobPayloadSchema>;

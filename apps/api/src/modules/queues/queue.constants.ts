@@ -15,10 +15,11 @@ export const queueNames = Object.values(QUEUE_NAMES) as QueueName[];
 export const JOB_NAMES = {
   CASE_EVENT: "case-event",
   EVIDENCE_PROCESS: "evidence-process",
+  AI_OPERATION: "ai-operation",
   MAINTENANCE_RECONCILE_DISPATCHES: "maintenance-reconcile-dispatches",
 } as const;
 
-export const WORKFLOW_VERSION = "phase-5-v1";
+export const WORKFLOW_VERSION = "phase-6-v1";
 
 export function stableJobId(namespace: string, ...parts: string[]): string {
   const normalized = [namespace, ...parts]

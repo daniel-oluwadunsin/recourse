@@ -25,6 +25,11 @@
       "types": "./dist/modules/queues/redis-options.d.ts",
       "require": "./dist/modules/queues/redis-options.js",
       "default": "./dist/modules/queues/redis-options.js"
+    },
+    "./ai": {
+      "types": "./dist/modules/ai/ai.module.d.ts",
+      "require": "./dist/modules/ai/ai.module.js",
+      "default": "./dist/modules/ai/ai.module.js"
     }
   },
   "files": [
@@ -62,6 +67,7 @@
     "class-validator": "0.15.1",
     "cloudinary": "2.10.0",
     "cookie-parser": "1.4.7",
+    "groq-sdk": "1.5.0",
     "helmet": "8.3.0",
     "ioredis": "6.0.0",
     "mammoth": "1.12.1",
@@ -71,7 +77,8 @@
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "sanitize-html": "2.17.6",
-    "sharp": "0.35.3"
+    "sharp": "0.35.3",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.24",

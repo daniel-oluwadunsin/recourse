@@ -15,6 +15,8 @@ import { MaintenanceProcessor } from "./processors/maintenance.processor";
 import { QueueFailureObserver } from "./queue-failure-observer.service";
 import { WorkerHeartbeatService } from "./worker-heartbeat.service";
 import { WorkerQueueConfigService } from "./worker-queue-config.service";
+import { AIModule } from "api/ai";
+import { AIOperationsProcessor } from "./processors/ai-operations.processor";
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { WorkerQueueConfigService } from "./worker-queue-config.service";
     ),
     QueuesModule,
     WorkerDomainModule,
+    AIModule,
   ],
   providers: [
     {
@@ -49,6 +52,7 @@ import { WorkerQueueConfigService } from "./worker-queue-config.service";
     CaseOrchestrationProcessor,
     EvidenceProcessingProcessor,
     MaintenanceProcessor,
+    AIOperationsProcessor,
     QueueFailureObserver,
     WorkerHeartbeatService,
     WorkerQueueConfigService,

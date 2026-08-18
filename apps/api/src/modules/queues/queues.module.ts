@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 
@@ -20,7 +20,9 @@ import {
 import { Case, CaseSchema } from "../cases/schemas/case.schema";
 import { CaseEvent, CaseEventSchema } from "../cases/schemas/case-event.schema";
 import { Evidence, EvidenceSchema } from "../evidence/schemas/evidence.schema";
+import { Decision, DecisionSchema } from "../cases/schemas/decision.schema";
 import { JobFailure, JobFailureSchema } from "./schemas/job-failure.schema";
+import { CasesModule } from "../cases/cases.module";
 
 @Module({
   exports: [
@@ -33,11 +35,13 @@ import { JobFailure, JobFailureSchema } from "./schemas/job-failure.schema";
   ],
   imports: [
     ConfigModule,
+    forwardRef(() => CasesModule),
     MongooseModule.forFeature([
       { name: WorkflowDispatch.name, schema: WorkflowDispatchSchema },
       { name: Case.name, schema: CaseSchema },
       { name: CaseEvent.name, schema: CaseEventSchema },
       { name: Evidence.name, schema: EvidenceSchema },
+      { name: Decision.name, schema: DecisionSchema },
       { name: JobFailure.name, schema: JobFailureSchema },
     ]),
   ],

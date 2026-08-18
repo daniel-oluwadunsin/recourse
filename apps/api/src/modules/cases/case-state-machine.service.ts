@@ -47,6 +47,7 @@ export interface TransitionOptions {
   expectedCurrent?: readonly CaseStatus[];
   idempotencyKey?: string;
   payload?: Record<string, unknown>;
+  expectedRevision?: number;
 }
 
 @Injectable()
@@ -98,6 +99,13 @@ export class CaseStateMachineService {
       if (
         options.expectedCurrent &&
         !options.expectedCurrent.includes(current.status)
+      ) {
+        throw new InvalidCaseTransitionError(current.status, to);
+      }
+
+      if (
+        options.expectedRevision !== undefined &&
+        current.revision !== options.expectedRevision
       ) {
         throw new InvalidCaseTransitionError(current.status, to);
       }

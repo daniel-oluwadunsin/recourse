@@ -3,6 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { Queue } from "bullmq";
 
 import {
+  aiOperationJobPayloadSchema,
+  type AIOperationJobPayload,
   caseEventJobPayloadSchema,
   type CaseEventJobPayload,
   evidenceProcessingJobPayloadSchema,
@@ -67,6 +69,25 @@ export class QueueProducerService implements OnApplicationShutdown {
     const jobId = stableJobId("maintenance", parsed.idempotencyKey);
     await this.queue(QUEUE_NAMES.MAINTENANCE).add(
       JOB_NAMES.MAINTENANCE_RECONCILE_DISPATCHES,
+      parsed,
+      { jobId },
+    );
+    return { duplicateSafe: true, jobId };
+  }
+
+  async enqueueAIOperation(
+    payload: AIOperationJobPayload,
+  ): Promise<{ jobId: string; duplicateSafe: true }> {
+    const parsed = aiOperationJobPayloadSchema.parse(payload);
+    const jobId = stableJobId(
+      "ai-operation",
+      parsed.operation,
+      parsed.caseId ?? "no-case",
+      parsed.evidenceId ?? "no-evidence",
+      parsed.inputHash,
+    );
+    await this.queue(QUEUE_NAMES.AI_OPERATIONS).add(
+      JOB_NAMES.AI_OPERATION,
       parsed,
       { jobId },
     );

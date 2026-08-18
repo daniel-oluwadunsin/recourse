@@ -167,6 +167,20 @@ const baseEnvironmentSchema = z.object({
   UPLOAD_MAX_PAGES: z.coerce.number().int().min(1).max(1000).default(100),
   UPLOAD_MAX_IMAGE_PIXELS: z.coerce.number().int().min(1).default(40_000_000),
   GROQ_API_KEY: optionalString,
+  GROQ_MODEL_FAST: z.string().min(1).default("openai/gpt-oss-20b"),
+  GROQ_MODEL_REASONING: z.string().min(1).default("openai/gpt-oss-120b"),
+  GROQ_MODEL_VISION: optionalString,
+  GROQ_DEFAULT_REASONING_EFFORT: z
+    .enum(["none", "low", "medium", "high"])
+    .default("medium"),
+  GROQ_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
+  GROQ_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  GROQ_RETRY_BASE_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .min(50)
+    .max(60000)
+    .default(500),
   TAVILY_API_KEY: optionalString,
 
   JWT_ACCESS_SECRET: optionalSecret,
@@ -238,6 +252,7 @@ export const environmentSchema = baseEnvironmentSchema.superRefine(
         "CLOUDINARY_CLOUD_NAME",
         "CLOUDINARY_API_KEY",
         "CLOUDINARY_API_SECRET",
+        "GROQ_API_KEY",
       ] as const) {
         if (!environment[key]) {
           context.addIssue({
@@ -246,6 +261,15 @@ export const environmentSchema = baseEnvironmentSchema.superRefine(
             path: [key],
           });
         }
+      }
+
+      if (!environment.GROQ_MODEL_VISION) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "GROQ_MODEL_VISION must be explicitly selected in production",
+          path: ["GROQ_MODEL_VISION"],
+        });
       }
 
       if (!environment.AUTH_COOKIE_SECURE) {

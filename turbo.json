@@ -22,6 +22,7 @@
         "RATE_LIMIT_STORAGE",
         "REDIS_URL",
         "REDIS_PREFIX",
+        "RUN_LIVE_GROQ_TESTS",
         "WORKER_NAME"
       ]
     },

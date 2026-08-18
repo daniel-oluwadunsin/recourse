@@ -17,6 +17,7 @@ import { EvidenceModule } from "./modules/evidence/evidence.module";
 import { HealthModule } from "./modules/health/health.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { QueuesModule } from "./modules/queues/queues.module";
+import { AIModule } from "./modules/ai/ai.module";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { QueuesModule } from "./modules/queues/queues.module";
     CasesModule,
     EvidenceModule,
     QueuesModule,
+    AIModule,
     AdminModule,
     HealthModule,
   ],

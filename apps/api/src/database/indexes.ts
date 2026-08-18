@@ -50,6 +50,7 @@ import {
   WorkflowDispatch,
   WorkflowDispatchSchema,
 } from "../modules/queues/schemas/workflow-dispatch.schema";
+import { AIRun, AIRunSchema } from "../modules/ai/schemas/ai-run.schema";
 
 const environment = parseEnvironment();
 
@@ -127,6 +128,7 @@ async function createAndVerifyIndexes(): Promise<void> {
         name: JobFailure.name,
         schema: JobFailureSchema,
       },
+      { collection: "ai_runs", name: AIRun.name, schema: AIRunSchema },
     ];
 
     for (const definition of definitions) {
