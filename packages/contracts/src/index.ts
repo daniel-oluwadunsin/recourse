@@ -148,10 +148,89 @@ export const caseEventTypeValues = [
   "CASE_RESOLVED",
   "CASE_EXHAUSTED",
   "CASE_NEEDS_HUMAN",
+  "EVIDENCE_UPLOAD_INTENT_CREATED",
+  "EVIDENCE_UPLOADED",
+  "EVIDENCE_PROCESSING_STARTED",
+  "EVIDENCE_PROCESSED",
+  "EVIDENCE_FAILED",
+  "EVIDENCE_DELETED",
 ] as const;
 
 export const caseEventTypeSchema = z.enum(caseEventTypeValues);
 export type CaseEventType = z.infer<typeof caseEventTypeSchema>;
+
+export const evidenceKindValues = [
+  "DECISION_NOTICE",
+  "SUPPORTING_DOCUMENT",
+  "SCREENSHOT",
+  "EMAIL",
+  "TEXT",
+  "INSTITUTION_RESPONSE",
+  "OTHER",
+] as const;
+
+export const evidenceKindSchema = z.enum(evidenceKindValues);
+export type EvidenceKind = z.infer<typeof evidenceKindSchema>;
+
+export const evidenceProcessingStatusValues = [
+  "UPLOADING",
+  "UPLOADED",
+  "QUEUED",
+  "PROCESSING",
+  "READY",
+  "UNSUPPORTED",
+  "FAILED",
+  "DELETING",
+  "DELETED",
+] as const;
+
+export const evidenceProcessingStatusSchema = z.enum(
+  evidenceProcessingStatusValues,
+);
+export type EvidenceProcessingStatus = z.infer<
+  typeof evidenceProcessingStatusSchema
+>;
+
+export const evidenceExtractionMethodValues = [
+  "PDF_TEXT",
+  "DOCX_TEXT",
+  "EML_TEXT",
+  "PLAIN_TEXT",
+  "IMAGE_METADATA",
+  "MULTIMODAL_FALLBACK",
+  "NONE",
+] as const;
+
+export const evidenceExtractionMethodSchema = z.enum(
+  evidenceExtractionMethodValues,
+);
+export type EvidenceExtractionMethod = z.infer<
+  typeof evidenceExtractionMethodSchema
+>;
+
+export const evidenceBlockTypeValues = [
+  "TEXT",
+  "PAGE_TEXT",
+  "EMAIL_BODY",
+  "IMAGE_METADATA",
+] as const;
+
+export const evidenceBlockTypeSchema = z.enum(evidenceBlockTypeValues);
+export type EvidenceBlockType = z.infer<typeof evidenceBlockTypeSchema>;
+
+export const evidenceErrorCodeValues = [
+  "INTEGRITY_MISMATCH",
+  "MIME_SIGNATURE_MISMATCH",
+  "DUPLICATE_CONTENT",
+  "PARSER_FAILED",
+  "PAGE_LIMIT_EXCEEDED",
+  "PIXEL_LIMIT_EXCEEDED",
+  "UNSUPPORTED_FORMAT",
+  "DELETION_FAILED",
+] as const;
+
+export const evidenceErrorCodeSchema = z.enum(evidenceErrorCodeValues);
+export type EvidenceErrorCode = z.infer<typeof evidenceErrorCodeSchema>;
 
 export const deadlineTypeValues = [
   "APPEAL",

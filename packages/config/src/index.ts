@@ -85,6 +85,51 @@ const baseEnvironmentSchema = z.object({
     .default(5000),
   MONGODB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).default(10000),
   MONGODB_SOCKET_TIMEOUT_MS: z.coerce.number().int().min(0).default(45000),
+  OBJECT_STORAGE_PROVIDER: z.literal("cloudinary").default("cloudinary"),
+  CLOUDINARY_CLOUD_NAME: optionalString,
+  CLOUDINARY_API_KEY: optionalString,
+  CLOUDINARY_API_SECRET: optionalString,
+  CLOUDINARY_UPLOAD_FOLDER: z.string().min(1).default("recourse"),
+  CLOUDINARY_UPLOAD_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(3600)
+    .default(900),
+  CLOUDINARY_DOWNLOAD_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(30)
+    .max(900)
+    .default(300),
+  LIVE_CLOUDINARY_CHECK: optionalBoolean.default(false),
+  UPLOAD_MAX_BYTES_PDF: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(25 * 1024 * 1024),
+  UPLOAD_MAX_BYTES_DOCX: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(15 * 1024 * 1024),
+  UPLOAD_MAX_BYTES_EMAIL: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(25 * 1024 * 1024),
+  UPLOAD_MAX_BYTES_TEXT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(2 * 1024 * 1024),
+  UPLOAD_MAX_BYTES_IMAGE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(15 * 1024 * 1024),
+  UPLOAD_MAX_PAGES: z.coerce.number().int().min(1).max(1000).default(100),
+  UPLOAD_MAX_IMAGE_PIXELS: z.coerce.number().int().min(1).default(40_000_000),
   GROQ_API_KEY: optionalString,
   TAVILY_API_KEY: optionalString,
 
@@ -151,6 +196,9 @@ export const environmentSchema = baseEnvironmentSchema.superRefine(
         "MONGODB_URI",
         "JWT_ACCESS_SECRET",
         "JWT_REFRESH_SECRET",
+        "CLOUDINARY_CLOUD_NAME",
+        "CLOUDINARY_API_KEY",
+        "CLOUDINARY_API_SECRET",
       ] as const) {
         if (!environment[key]) {
           context.addIssue({

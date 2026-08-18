@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
+import { Inject } from "@nestjs/common";
 import { InjectConnection, InjectModel } from "@nestjs/mongoose";
 import {
   ClientSession,
@@ -19,6 +21,16 @@ import {
 } from "@recourse/contracts";
 
 import { OwnershipAuthorizationService } from "../../common/authorization/ownership.service";
+import {
+  STORAGE_PROVIDER,
+  StorageProviderError,
+  type StorageProvider,
+} from "../storage/storage.types";
+import {
+  Evidence,
+  type EvidenceDocument,
+} from "../evidence/schemas/evidence.schema";
+import { EvidenceBlock } from "../evidence/schemas/evidence-block.schema";
 import { CaseEventService } from "./case-events.service";
 import { type CaseEventDocument } from "./schemas/case-event.schema";
 import { CaseTombstonedError, StaleCaseRevisionError } from "./cases.errors";
@@ -56,6 +68,11 @@ export class CasesService {
     @InjectConnection() private readonly connection: Connection,
     @InjectModel(Case.name) private readonly caseModel: Model<Case>,
     @InjectModel(Decision.name) private readonly decisionModel: Model<Decision>,
+    @InjectModel(Evidence.name)
+    private readonly evidenceModel: Model<Evidence>,
+    @InjectModel(EvidenceBlock.name)
+    private readonly evidenceBlockModel: Model<EvidenceBlock>,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly caseEventService: CaseEventService,
     private readonly institutionLookupService: InstitutionLookupService,
     private readonly ownershipAuthorizationService: OwnershipAuthorizationService,
@@ -390,15 +407,27 @@ export class CasesService {
     caseId: string,
     actor: CaseActor,
   ): Promise<void> {
-    await this.connection.transaction(async (session) => {
+    const deletedCaseId = await this.connection.transaction(async (session) => {
       const current = await this.findOwnedCaseIncludingDeleted(
         ownerId,
         caseId,
         session,
       );
       if (current.deletedAt) {
-        return;
+        return current._id;
       }
+
+      await this.evidenceModel.updateMany(
+        { caseId: current._id, deletedAt: null },
+        {
+          $inc: { deletionVersion: 1, revision: 1 },
+          $set: {
+            deletedAt: new Date(),
+            processingStatus: "DELETING",
+          },
+        },
+        { session },
+      );
 
       await this.caseEventService.appendInSession(
         {
@@ -431,7 +460,63 @@ export class CasesService {
       if (!deleted) {
         throw new StaleCaseRevisionError();
       }
+
+      return deleted._id;
     });
+
+    await this.purgeDeletedEvidence(deletedCaseId);
+  }
+
+  private async purgeDeletedEvidence(caseId: Types.ObjectId): Promise<void> {
+    const evidence = await this.evidenceModel
+      .find({ caseId, deletedAt: { $ne: null }, processingStatus: "DELETING" })
+      .exec();
+    const failures: EvidenceDocument[] = [];
+
+    for (const item of evidence) {
+      try {
+        await this.storage.deleteObject(item.storageKey);
+        await this.evidenceModel.updateOne(
+          {
+            _id: item._id,
+            deletedAt: { $ne: null },
+            processingStatus: "DELETING",
+          },
+          {
+            $inc: { revision: 1 },
+            $set: {
+              processingErrorCode: null,
+              processingErrorMessage: null,
+              processingStatus: "DELETED",
+            },
+          },
+        );
+        await this.evidenceBlockModel.deleteMany({ evidenceId: item._id });
+      } catch (error) {
+        if (error instanceof StorageProviderError) {
+          failures.push(item);
+          await this.evidenceModel.updateOne(
+            { _id: item._id, processingStatus: "DELETING" },
+            {
+              $inc: { revision: 1 },
+              $set: {
+                processingErrorCode: "DELETION_FAILED",
+                processingErrorMessage:
+                  "Evidence storage deletion requires retry.",
+              },
+            },
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (failures.length > 0) {
+      throw new ServiceUnavailableException(
+        "One or more evidence objects require deletion retry.",
+      );
+    }
   }
 
   async listEvents(

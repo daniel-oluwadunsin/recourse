@@ -34,6 +34,14 @@ import {
   InstitutionSchema,
 } from "../modules/cases/schemas/institution.schema";
 import { User, UserSchema } from "../modules/users/schemas/user.schema";
+import {
+  Evidence,
+  EvidenceSchema,
+} from "../modules/evidence/schemas/evidence.schema";
+import {
+  EvidenceBlock,
+  EvidenceBlockSchema,
+} from "../modules/evidence/schemas/evidence-block.schema";
 
 const environment = parseEnvironment();
 
@@ -80,6 +88,12 @@ async function createAndVerifyIndexes(): Promise<void> {
         schema: DeadlineSchema,
       },
       { collection: "users", name: User.name, schema: UserSchema },
+      { collection: "evidence", name: Evidence.name, schema: EvidenceSchema },
+      {
+        collection: "evidence_blocks",
+        name: EvidenceBlock.name,
+        schema: EvidenceBlockSchema,
+      },
       {
         collection: "refresh_tokens",
         name: RefreshToken.name,

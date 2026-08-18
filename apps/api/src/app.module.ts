@@ -13,6 +13,7 @@ import { RequestContextMiddleware } from "./common/request-context.middleware";
 import { DatabaseModule } from "./database/database.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CasesModule } from "./modules/cases/cases.module";
+import { EvidenceModule } from "./modules/evidence/evidence.module";
 import { HealthModule } from "./modules/health/health.module";
 
 @Module({
@@ -50,6 +51,7 @@ import { HealthModule } from "./modules/health/health.module";
     AuthorizationModule,
     AuthModule,
     CasesModule,
+    EvidenceModule,
     HealthModule,
   ],
   providers: [
