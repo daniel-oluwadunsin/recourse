@@ -99,6 +99,11 @@ import {
   TimelineEvent,
   TimelineEventSchema,
 } from "../modules/intelligence/schemas/timeline-event.schema";
+import { Appeal, AppealSchema } from "../modules/appeals/schemas/appeal.schema";
+import {
+  CaseAction,
+  CaseActionSchema,
+} from "../modules/appeals/schemas/case-action.schema";
 
 const environment = parseEnvironment();
 
@@ -232,6 +237,12 @@ async function createAndVerifyIndexes(): Promise<void> {
         collection: "graph_edges",
         name: GraphEdge.name,
         schema: GraphEdgeSchema,
+      },
+      { collection: "appeals", name: Appeal.name, schema: AppealSchema },
+      {
+        collection: "case_actions",
+        name: CaseAction.name,
+        schema: CaseActionSchema,
       },
     ];
 

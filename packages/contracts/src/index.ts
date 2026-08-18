@@ -124,6 +124,81 @@ export const controlledActionTypeValues = [
 export const controlledActionTypeSchema = z.enum(controlledActionTypeValues);
 export type ControlledActionType = z.infer<typeof controlledActionTypeSchema>;
 
+export const appealStatusValues = [
+  "DRAFT",
+  "AWAITING_APPROVAL",
+  "APPROVED",
+  "SUBMITTED",
+  "BLOCKED",
+  "CANCELLED",
+] as const;
+export const appealStatusSchema = z.enum(appealStatusValues);
+export type AppealStatus = z.infer<typeof appealStatusSchema>;
+
+export const appealRequestedOutcomeValues = [
+  "REVIEW_DECISION",
+  "REINSTATE_ACCESS",
+  "REMOVE_RESTRICTION",
+  "RELEASE_FUNDS",
+  "RESTORE_CONTENT",
+  "CLARIFY_REASON",
+  "OTHER",
+] as const;
+export const appealRequestedOutcomeSchema = z.enum(
+  appealRequestedOutcomeValues,
+);
+export type AppealRequestedOutcome = z.infer<
+  typeof appealRequestedOutcomeSchema
+>;
+
+export const appealArgumentSchema = z.object({
+  proposition: z.string().trim().min(1).max(4000),
+  supportingClaimIds: z.array(z.string().min(1)).max(50),
+  supportingEvidenceIds: z.array(z.string().min(1)).max(100),
+  supportingProceduralClaimIds: z.array(z.string().min(1)).max(50),
+  requestedOutcome: appealRequestedOutcomeSchema,
+});
+export type AppealArgument = z.infer<typeof appealArgumentSchema>;
+
+export const appealStructuredArgumentsSchema = z.object({
+  introduction: z.string().trim().min(1).max(4000),
+  arguments: z.array(appealArgumentSchema).min(1).max(20),
+  requestedOutcome: appealRequestedOutcomeSchema,
+  conclusion: z.string().trim().min(1).max(4000),
+});
+export type AppealStructuredArguments = z.infer<
+  typeof appealStructuredArgumentsSchema
+>;
+
+export const actionStatusValues = [
+  "PROPOSED",
+  "AWAITING_APPROVAL",
+  "APPROVED",
+  "PREPARING",
+  "PREPARED",
+  "EXECUTING",
+  "SUCCEEDED",
+  "FAILED",
+  "VERIFICATION_FAILED",
+  "CANCELLED",
+  "UNAVAILABLE",
+] as const;
+export const actionStatusSchema = z.enum(actionStatusValues);
+export type ActionStatus = z.infer<typeof actionStatusSchema>;
+
+export const actionVerificationStatusValues = [
+  "PENDING",
+  "VERIFIED",
+  "FAILED",
+  "NOT_APPLICABLE",
+] as const;
+export const actionVerificationStatusSchema = z.enum(
+  actionVerificationStatusValues,
+);
+export type ActionVerificationStatus = z.infer<
+  typeof actionVerificationStatusSchema
+>;
+
 export const caseEventActorTypeValues = [
   "USER",
   "RECOURSE",
@@ -160,6 +235,11 @@ export const caseEventTypeValues = [
   "CASE_GAP_DISCOVERED",
   "READINESS_UPDATED",
   "GRAPH_REBUILT",
+  "APPEAL_GENERATED",
+  "ACTION_AWAITING_APPROVAL",
+  "ACTION_COMPLETED",
+  "ACTION_VERIFICATION_FAILED",
+  "ACTION_CANCELLED",
 ] as const;
 
 export const caseEventTypeSchema = z.enum(caseEventTypeValues);
