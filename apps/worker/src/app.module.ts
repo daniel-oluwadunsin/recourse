@@ -17,6 +17,7 @@ import { WorkerHeartbeatService } from "./worker-heartbeat.service";
 import { WorkerQueueConfigService } from "./worker-queue-config.service";
 import { AIModule } from "api/ai";
 import { AIOperationsProcessor } from "./processors/ai-operations.processor";
+import { ProcedureRetrievalProcessor } from "./processors/procedure-retrieval.processor";
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { AIOperationsProcessor } from "./processors/ai-operations.processor";
     EvidenceProcessingProcessor,
     MaintenanceProcessor,
     AIOperationsProcessor,
+    ProcedureRetrievalProcessor,
     QueueFailureObserver,
     WorkerHeartbeatService,
     WorkerQueueConfigService,

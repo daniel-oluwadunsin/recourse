@@ -18,6 +18,8 @@ import { HealthModule } from "./modules/health/health.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { QueuesModule } from "./modules/queues/queues.module";
 import { AIModule } from "./modules/ai/ai.module";
+import { ProcedureModule } from "./modules/procedure/procedure.module";
+import { IntelligenceModule } from "./modules/intelligence/intelligence.module";
 
 @Module({
   imports: [
@@ -57,6 +59,8 @@ import { AIModule } from "./modules/ai/ai.module";
     EvidenceModule,
     QueuesModule,
     AIModule,
+    ProcedureModule,
+    IntelligenceModule,
     AdminModule,
     HealthModule,
   ],

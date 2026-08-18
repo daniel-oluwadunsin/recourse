@@ -21,7 +21,18 @@ export interface ReadinessSnapshot {
   score: number;
   version: string;
   factors: ReadinessFactor[];
+  caps: string[];
   computedAt: Date | null;
+}
+
+export interface CaseAnalysisSnapshot {
+  centralIssues: string[];
+  unresolvedFacts: string[];
+  recommendedNextSteps: string[];
+  supportedClaimIds: string[];
+  needsHumanReview: boolean;
+  modelRunId: string | null;
+  computedAt: Date;
 }
 
 @Schema({ collection: "cases", timestamps: true })
@@ -71,6 +82,7 @@ export class Case {
   @Prop({
     default: () => ({
       computedAt: null,
+      caps: [],
       factors: [],
       score: 0,
       version: "v1",
@@ -79,6 +91,9 @@ export class Case {
     type: Object,
   })
   readiness!: ReadinessSnapshot;
+
+  @Prop({ default: null, type: Object })
+  analysis!: CaseAnalysisSnapshot | null;
 
   @Prop({ default: null, ref: "Procedure", type: SchemaTypes.ObjectId })
   activeProcedureId!: Types.ObjectId | null;

@@ -51,6 +51,54 @@ import {
   WorkflowDispatchSchema,
 } from "../modules/queues/schemas/workflow-dispatch.schema";
 import { AIRun, AIRunSchema } from "../modules/ai/schemas/ai-run.schema";
+import {
+  RetrievalRun,
+  RetrievalRunSchema,
+} from "../modules/retrieval/schemas/retrieval-run.schema";
+import {
+  SourceSnapshot,
+  SourceSnapshotSchema,
+} from "../modules/retrieval/schemas/source-snapshot.schema";
+import {
+  Procedure,
+  ProcedureSchema,
+} from "../modules/procedure/schemas/procedure.schema";
+import {
+  ProcedureVersion,
+  ProcedureVersionSchema,
+} from "../modules/procedure/schemas/procedure-version.schema";
+import {
+  ProceduralClaim,
+  ProceduralClaimSchema,
+} from "../modules/procedure/schemas/procedural-claim.schema";
+import {
+  ProcedureSourceChunk,
+  ProcedureSourceChunkSchema,
+} from "../modules/procedure/schemas/procedure-source-chunk.schema";
+import {
+  Claim,
+  ClaimSchema,
+} from "../modules/intelligence/schemas/claim.schema";
+import {
+  Contradiction,
+  ContradictionSchema,
+} from "../modules/intelligence/schemas/contradiction.schema";
+import {
+  EvidenceRequirementMatch,
+  EvidenceRequirementMatchSchema,
+} from "../modules/intelligence/schemas/evidence-requirement-match.schema";
+import {
+  GraphEdge,
+  GraphEdgeSchema,
+} from "../modules/intelligence/schemas/graph-edge.schema";
+import {
+  GraphNode,
+  GraphNodeSchema,
+} from "../modules/intelligence/schemas/graph-node.schema";
+import {
+  TimelineEvent,
+  TimelineEventSchema,
+} from "../modules/intelligence/schemas/timeline-event.schema";
 
 const environment = parseEnvironment();
 
@@ -129,6 +177,62 @@ async function createAndVerifyIndexes(): Promise<void> {
         schema: JobFailureSchema,
       },
       { collection: "ai_runs", name: AIRun.name, schema: AIRunSchema },
+      {
+        collection: "retrieval_runs",
+        name: RetrievalRun.name,
+        schema: RetrievalRunSchema,
+      },
+      {
+        collection: "source_snapshots",
+        name: SourceSnapshot.name,
+        schema: SourceSnapshotSchema,
+      },
+      {
+        collection: "procedures",
+        name: Procedure.name,
+        schema: ProcedureSchema,
+      },
+      {
+        collection: "procedure_versions",
+        name: ProcedureVersion.name,
+        schema: ProcedureVersionSchema,
+      },
+      {
+        collection: "procedural_claims",
+        name: ProceduralClaim.name,
+        schema: ProceduralClaimSchema,
+      },
+      {
+        collection: "procedure_source_chunks",
+        name: ProcedureSourceChunk.name,
+        schema: ProcedureSourceChunkSchema,
+      },
+      { collection: "claims", name: Claim.name, schema: ClaimSchema },
+      {
+        collection: "timeline_events",
+        name: TimelineEvent.name,
+        schema: TimelineEventSchema,
+      },
+      {
+        collection: "contradictions",
+        name: Contradiction.name,
+        schema: ContradictionSchema,
+      },
+      {
+        collection: "evidence_requirement_matches",
+        name: EvidenceRequirementMatch.name,
+        schema: EvidenceRequirementMatchSchema,
+      },
+      {
+        collection: "graph_nodes",
+        name: GraphNode.name,
+        schema: GraphNodeSchema,
+      },
+      {
+        collection: "graph_edges",
+        name: GraphEdge.name,
+        schema: GraphEdgeSchema,
+      },
     ];
 
     for (const definition of definitions) {

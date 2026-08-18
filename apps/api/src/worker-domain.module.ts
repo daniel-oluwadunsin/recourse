@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "./database/database.module";
 import { EvidenceModule } from "./modules/evidence/evidence.module";
+import { ProcedureModule } from "./modules/procedure/procedure.module";
+import { IntelligenceModule } from "./modules/intelligence/intelligence.module";
 
 /**
  * Reusable persistence/evidence boundary for the standalone worker process.
@@ -9,8 +11,13 @@ import { EvidenceModule } from "./modules/evidence/evidence.module";
  * extraction and tombstone checks are not duplicated in a second runtime.
  */
 @Module({
-  exports: [EvidenceModule],
-  imports: [DatabaseModule, EvidenceModule],
+  exports: [EvidenceModule, ProcedureModule, IntelligenceModule],
+  imports: [
+    DatabaseModule,
+    EvidenceModule,
+    ProcedureModule,
+    IntelligenceModule,
+  ],
 })
 export class WorkerDomainModule {}
 
@@ -18,3 +25,7 @@ export { EvidenceService } from "./modules/evidence/evidence.service";
 export { EvidenceDeletedError } from "./modules/evidence/evidence.errors";
 export { ExtractionFailure } from "./modules/evidence/extraction.types";
 export { StorageProviderError } from "./modules/storage/storage.types";
+export {
+  ProcedureService,
+  ProcedureResolutionError,
+} from "./modules/procedure/procedure.service";

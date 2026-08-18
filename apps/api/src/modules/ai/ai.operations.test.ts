@@ -14,15 +14,23 @@ import {
 import { classifyCasePrompt } from "./prompts/classify-case.v1";
 
 describe("bounded AI operation catalog", () => {
-  it("keeps the initial operations versioned and routed to the fast model", () => {
+  it("keeps bounded operations versioned and explicitly routed", () => {
     expect(Object.keys(aiOperationRegistry)).toEqual([
       "classify-case",
       "extract-document-claims",
       "extract-timeline-events",
+      "extract-procedure",
+      "verify-procedural-claim",
+      "detect-claim-conflicts",
+      "analyze-case",
     ]);
     expect(aiOperationRegistry["classify-case"].modelPurpose).toBe("FAST");
     expect(aiOperationRegistry["extract-document-claims"].promptVersion).toBe(
       "extract-document-claims.v1",
+    );
+    expect(aiOperationRegistry["extract-procedure"].modelPurpose).toBe("FAST");
+    expect(aiOperationRegistry["verify-procedural-claim"].modelPurpose).toBe(
+      "REASONING",
     );
   });
 

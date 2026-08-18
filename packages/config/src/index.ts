@@ -181,7 +181,103 @@ const baseEnvironmentSchema = z.object({
     .min(50)
     .max(60000)
     .default(500),
+  EMBEDDING_PROVIDER: z.literal("voyage").default("voyage"),
+  EMBEDDING_API_KEY: optionalString,
+  EMBEDDING_MODEL: z.string().min(1).default("voyage-4-lite"),
+  EMBEDDING_DIMENSIONS: z.coerce.number().int().min(1).max(8192).default(1024),
+  EMBEDDING_BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(64),
+  EMBEDDING_REQUEST_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(30000),
+  EMBEDDING_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  EMBEDDING_RETRY_BASE_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .min(50)
+    .max(60000)
+    .default(500),
+  VECTOR_SEARCH_INDEX_EVIDENCE: z
+    .string()
+    .min(1)
+    .default("evidence_blocks_vector"),
+  VECTOR_SEARCH_INDEX_PROCEDURE: z
+    .string()
+    .min(1)
+    .default("procedure_source_chunks_vector"),
+  ATLAS_SEARCH_INDEX_EVIDENCE: z
+    .string()
+    .min(1)
+    .default("evidence_blocks_lexical"),
+  ATLAS_SEARCH_INDEX_PROCEDURE: z
+    .string()
+    .min(1)
+    .default("procedure_source_chunks_lexical"),
+  VECTOR_SEARCH_NUM_CANDIDATES: z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(10000)
+    .default(200),
+  VECTOR_SEARCH_LIMIT: z.coerce.number().int().min(1).max(100).default(20),
+  INTELLIGENCE_MAX_EVIDENCE_PER_ANALYSIS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(25),
+  INTELLIGENCE_MAX_BLOCKS_PER_EVIDENCE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(100),
+  INTELLIGENCE_MAX_CLAIMS_PER_ANALYSIS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(250),
+  INTELLIGENCE_MAX_CONTRADICTION_PAIRS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(100),
   TAVILY_API_KEY: optionalString,
+  TAVILY_PROJECT_ID: optionalString,
+  TAVILY_SEARCH_DEPTH: z.enum(["basic", "advanced"]).default("advanced"),
+  TAVILY_EXTRACT_DEPTH: z.enum(["basic", "advanced"]).default("advanced"),
+  TAVILY_SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(20).default(8),
+  TAVILY_MAX_QUERIES_PER_PROCEDURE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .default(3),
+  TAVILY_MAX_EXTRACT_PAGES: z.coerce.number().int().min(1).max(20).default(8),
+  TAVILY_CRAWL_MAX_DEPTH: z.coerce.number().int().min(1).max(5).default(2),
+  TAVILY_CRAWL_MAX_BREADTH: z.coerce.number().int().min(1).max(500).default(20),
+  TAVILY_CRAWL_MAX_PAGES: z.coerce.number().int().min(1).max(50).default(20),
+  TAVILY_INCLUDE_USAGE: optionalBoolean.default(true),
+  TAVILY_REQUEST_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(150)
+    .default(60),
+  TAVILY_MAX_CREDITS_PER_PROCEDURE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(20),
+  TAVILY_USAGE_CACHE_TTL_MS: z.coerce.number().int().min(60000).default(600000),
+  PROCEDURE_CACHE_TTL_HOURS: z.coerce.number().int().min(1).default(24),
+  PROCEDURE_STALE_AFTER_HOURS: z.coerce.number().int().min(1).default(168),
+  PROCEDURE_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.65),
+  PROCEDURE_MAX_CLAIMS: z.coerce.number().int().min(1).max(100).default(50),
 
   JWT_ACCESS_SECRET: optionalSecret,
   JWT_ACCESS_TTL: durationSchema.default("15m"),
@@ -253,6 +349,8 @@ export const environmentSchema = baseEnvironmentSchema.superRefine(
         "CLOUDINARY_API_KEY",
         "CLOUDINARY_API_SECRET",
         "GROQ_API_KEY",
+        "TAVILY_API_KEY",
+        "EMBEDDING_API_KEY",
       ] as const) {
         if (!environment[key]) {
           context.addIssue({

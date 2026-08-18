@@ -154,6 +154,12 @@ export const caseEventTypeValues = [
   "EVIDENCE_PROCESSED",
   "EVIDENCE_FAILED",
   "EVIDENCE_DELETED",
+  "CLAIMS_UPDATED",
+  "TIMELINE_UPDATED",
+  "CONTRADICTION_DISCOVERED",
+  "CASE_GAP_DISCOVERED",
+  "READINESS_UPDATED",
+  "GRAPH_REBUILT",
 ] as const;
 
 export const caseEventTypeSchema = z.enum(caseEventTypeValues);
@@ -218,6 +224,93 @@ export const evidenceBlockTypeValues = [
 export const evidenceBlockTypeSchema = z.enum(evidenceBlockTypeValues);
 export type EvidenceBlockType = z.infer<typeof evidenceBlockTypeSchema>;
 
+export const claimSourceTypeValues = [
+  "EVIDENCE_BLOCK",
+  "PROCEDURAL_CLAIM",
+  "USER_STATEMENT",
+] as const;
+export const claimSourceTypeSchema = z.enum(claimSourceTypeValues);
+export type ClaimSourceType = z.infer<typeof claimSourceTypeSchema>;
+
+export const claimResolutionStatusValues = [
+  "OPEN",
+  "RESOLVED",
+  "MERGED",
+] as const;
+export const claimResolutionStatusSchema = z.enum(claimResolutionStatusValues);
+export type ClaimResolutionStatus = z.infer<typeof claimResolutionStatusSchema>;
+
+export const contradictionStatusValues = [
+  "OPEN",
+  "RESOLVED",
+  "EXPLAINABLE",
+  "UNKNOWN",
+] as const;
+export const contradictionStatusSchema = z.enum(contradictionStatusValues);
+export type ContradictionStatus = z.infer<typeof contradictionStatusSchema>;
+
+export const contradictionKindValues = [
+  "DATE_MISMATCH",
+  "NUMBER_MISMATCH",
+  "IDENTIFIER_MISMATCH",
+  "ENTITY_NAME_MISMATCH",
+  "SEMANTIC_CONFLICT",
+  "PROCEDURE_CONFLICT",
+] as const;
+export const contradictionKindSchema = z.enum(contradictionKindValues);
+export type ContradictionKind = z.infer<typeof contradictionKindSchema>;
+
+export const evidenceRequirementMatchStatusValues = [
+  "SATISFIED",
+  "PARTIAL",
+  "MISSING",
+  "NOT_APPLICABLE",
+  "UNCERTAIN",
+] as const;
+export const evidenceRequirementMatchStatusSchema = z.enum(
+  evidenceRequirementMatchStatusValues,
+);
+export type EvidenceRequirementMatchStatus = z.infer<
+  typeof evidenceRequirementMatchStatusSchema
+>;
+
+export const graphNodeTypeValues = [
+  "CASE",
+  "EVIDENCE",
+  "EVIDENCE_BLOCK",
+  "CLAIM",
+  "TIMELINE_EVENT",
+  "PROCEDURE",
+  "PROCEDURAL_CLAIM",
+  "REQUIREMENT",
+  "CONTRADICTION",
+  "ENTITY",
+] as const;
+export const graphNodeTypeSchema = z.enum(graphNodeTypeValues);
+export type GraphNodeType = z.infer<typeof graphNodeTypeSchema>;
+
+export const graphEdgeTypeValues = [
+  "HAS_EVIDENCE",
+  "HAS_BLOCK",
+  "SUPPORTS",
+  "MENTIONS",
+  "OCCURRED_ON",
+  "APPLIES_TO",
+  "REQUIRES",
+  "CONTRADICTS",
+  "RESOLVES",
+  "SAME_ENTITY",
+] as const;
+export const graphEdgeTypeSchema = z.enum(graphEdgeTypeValues);
+export type GraphEdgeType = z.infer<typeof graphEdgeTypeSchema>;
+
+export const timelineDatePrecisionValues = [
+  "EXACT",
+  "APPROXIMATE",
+  "UNKNOWN",
+] as const;
+export const timelineDatePrecisionSchema = z.enum(timelineDatePrecisionValues);
+export type TimelineDatePrecision = z.infer<typeof timelineDatePrecisionSchema>;
 export const evidenceErrorCodeValues = [
   "INTEGRITY_MISMATCH",
   "MIME_SIGNATURE_MISMATCH",
@@ -404,6 +497,10 @@ export const aiOperationNameValues = [
   "classify-case",
   "extract-document-claims",
   "extract-timeline-events",
+  "extract-procedure",
+  "verify-procedural-claim",
+  "detect-claim-conflicts",
+  "analyze-case",
 ] as const;
 
 export const aiOperationNameSchema = z.enum(aiOperationNameValues);
@@ -427,3 +524,98 @@ export const aiOperationJobPayloadSchema = queueJobPayloadSchema.extend({
   inputHash: z.string().regex(/^[a-f0-9]{64}$/),
 });
 export type AIOperationJobPayload = z.infer<typeof aiOperationJobPayloadSchema>;
+
+export const sourceAuthorityTierValues = [
+  "TIER_1_OFFICIAL_INSTITUTION",
+  "TIER_1_OFFICIAL_GOVERNMENT",
+  "TIER_1_REGULATOR_ADR",
+  "TIER_2_REPUTABLE_SECONDARY",
+  "TIER_3_UNOFFICIAL",
+  "UNKNOWN",
+] as const;
+
+export const sourceAuthorityTierSchema = z.enum(sourceAuthorityTierValues);
+export type SourceAuthorityTier = z.infer<typeof sourceAuthorityTierSchema>;
+
+export const retrievalOperationValues = [
+  "SEARCH",
+  "EXTRACT",
+  "MAP",
+  "CRAWL",
+  "USAGE",
+] as const;
+export const retrievalOperationSchema = z.enum(retrievalOperationValues);
+export type RetrievalOperation = z.infer<typeof retrievalOperationSchema>;
+
+export const retrievalRunStatusValues = [
+  "RUNNING",
+  "SUCCEEDED",
+  "PARTIAL",
+  "FAILED",
+] as const;
+export const retrievalRunStatusSchema = z.enum(retrievalRunStatusValues);
+export type RetrievalRunStatus = z.infer<typeof retrievalRunStatusSchema>;
+
+export const procedureStatusValues = [
+  "ACTIVE",
+  "CONFLICTED",
+  "UNRESOLVED",
+  "STALE",
+  "ARCHIVED",
+] as const;
+export const procedureStatusSchema = z.enum(procedureStatusValues);
+export type ProcedureStatus = z.infer<typeof procedureStatusSchema>;
+
+export const proceduralClaimTypeValues = [
+  "ELIGIBILITY",
+  "ROUTE",
+  "DEADLINE",
+  "REQUIREMENT",
+  "STEP",
+  "ESCALATION",
+  "CONTACT",
+  "OTHER",
+] as const;
+export const proceduralClaimTypeSchema = z.enum(proceduralClaimTypeValues);
+export type ProceduralClaimType = z.infer<typeof proceduralClaimTypeSchema>;
+
+export const proceduralClaimVerificationStatusValues = [
+  "SUPPORTED",
+  "CONTRADICTED",
+  "AMBIGUOUS",
+  "NOT_FOUND",
+  "UNVERIFIED",
+] as const;
+export const proceduralClaimVerificationStatusSchema = z.enum(
+  proceduralClaimVerificationStatusValues,
+);
+export type ProceduralClaimVerificationStatus = z.infer<
+  typeof proceduralClaimVerificationStatusSchema
+>;
+
+export const sourceSnapshotStatusValues = [
+  "RETRIEVED",
+  "FAILED",
+  "UNAVAILABLE",
+] as const;
+export const sourceSnapshotStatusSchema = z.enum(sourceSnapshotStatusValues);
+export type SourceSnapshotStatus = z.infer<typeof sourceSnapshotStatusSchema>;
+
+export const procedureScopeSchema = z.object({
+  institutionId: z.string().min(1).nullable(),
+  institutionName: z.string().trim().max(200).nullable(),
+  relationship: relationshipTypeSchema.nullable(),
+  decisionType: decisionTypeSchema.nullable(),
+  jurisdictionKey: z.string().trim().max(100).nullable(),
+});
+export type ProcedureScope = z.infer<typeof procedureScopeSchema>;
+
+export const procedureRetrievalJobPayloadSchema = queueJobPayloadSchema.extend({
+  caseId: z.string().min(1),
+  expectedRevision: z.number().int().nonnegative(),
+  classificationHash: z.string().regex(/^[a-f0-9]{64}$/),
+  queryHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type ProcedureRetrievalJobPayload = z.infer<
+  typeof procedureRetrievalJobPayloadSchema
+>;

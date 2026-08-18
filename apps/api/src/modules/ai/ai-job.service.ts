@@ -1,4 +1,10 @@
-import { Inject, Injectable } from "@nestjs/common";
+import {
+  ConflictException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { isValidObjectId, Model, Types } from "mongoose";
 
@@ -21,6 +27,7 @@ import {
   type ClassifyCaseInput,
   type ExtractDocumentClaimsInput,
 } from "./operation-schemas";
+import { CaseIntelligenceService } from "../intelligence/case-intelligence.service";
 
 export class AIJobDomainError extends Error {
   constructor(
@@ -43,6 +50,8 @@ export class AIJobService {
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly operationService: AIOperationService,
     private readonly stateMachine: CaseStateMachineService,
+    @Inject(forwardRef(() => CaseIntelligenceService))
+    private readonly intelligence: CaseIntelligenceService,
   ) {}
 
   async process(payload: AIOperationJobPayload): Promise<unknown> {
@@ -54,6 +63,44 @@ export class AIJobService {
         return this.documentClaims(parsed);
       case "extract-timeline-events":
         return this.timeline(parsed);
+      case "extract-procedure":
+      case "verify-procedural-claim":
+      case "detect-claim-conflicts":
+      case "analyze-case":
+        if (parsed.operation === "analyze-case") {
+          if (!parsed.caseId || parsed.expectedRevision === null) {
+            throw new AIJobDomainError(
+              "INVALID_CASE_ANALYSIS_PAYLOAD",
+              "Case analysis requires a case and expected revision.",
+            );
+          }
+          assertInputHash(parsed, {
+            caseId: parsed.caseId,
+            revision: parsed.expectedRevision,
+          });
+          try {
+            return await this.intelligence.processCaseAnalysis(
+              parsed.caseId,
+              parsed.expectedRevision,
+              parsed.correlationId,
+            );
+          } catch (error: unknown) {
+            if (
+              error instanceof ConflictException ||
+              error instanceof NotFoundException
+            ) {
+              throw new AIJobDomainError(
+                "STALE_OR_DELETED_CASE",
+                "Case analysis is no longer applicable to this case revision.",
+              );
+            }
+            throw error;
+          }
+        }
+        throw new AIJobDomainError(
+          "UNSUPPORTED_AI_QUEUE_OPERATION",
+          "This AI operation is invoked only by the intelligence boundary.",
+        );
     }
   }
 

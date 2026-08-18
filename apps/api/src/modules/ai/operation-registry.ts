@@ -8,10 +8,22 @@ import {
   extractDocumentClaimsOutputSchema,
   extractTimelineEventsInputSchema,
   extractTimelineEventsOutputSchema,
+  extractProcedureInputSchema,
+  extractProcedureOutputSchema,
+  verifyProceduralClaimInputSchema,
+  verifyProceduralClaimOutputSchema,
+  claimConflictInputSchema,
+  claimConflictOutputSchema,
+  caseAnalysisInputSchema,
+  caseAnalysisOutputSchema,
 } from "./operation-schemas";
 import { classifyCasePrompt } from "./prompts/classify-case.v1";
 import { extractDocumentClaimsPrompt } from "./prompts/extract-document-claims.v1";
 import { extractTimelineEventsPrompt } from "./prompts/extract-timeline-events.v1";
+import { extractProcedurePrompt } from "./prompts/extract-procedure.v1";
+import { verifyProceduralClaimPrompt } from "./prompts/verify-procedural-claim.v1";
+import { detectClaimConflictsPrompt } from "./prompts/detect-claim-conflicts.v1";
+import { analyzeCasePrompt } from "./prompts/analyze-case.v1";
 
 export interface AIOperationDefinition<
   TInput extends z.ZodType,
@@ -60,6 +72,50 @@ export const aiOperationRegistry = {
     inputSchema: extractTimelineEventsInputSchema,
     outputSchema: extractTimelineEventsOutputSchema,
     maxCompletionTokens: 4_000,
+    buildPromptInput: (input) => JSON.stringify(input),
+  },
+  "extract-procedure": {
+    name: "extract-procedure",
+    modelPurpose: "FAST",
+    promptVersion: extractProcedurePrompt.promptVersion,
+    schemaVersion: extractProcedurePrompt.schemaVersion,
+    schemaName: "extract_procedure_v1",
+    inputSchema: extractProcedureInputSchema,
+    outputSchema: extractProcedureOutputSchema,
+    maxCompletionTokens: 6000,
+    buildPromptInput: (input) => JSON.stringify(input),
+  },
+  "verify-procedural-claim": {
+    name: "verify-procedural-claim",
+    modelPurpose: "REASONING",
+    promptVersion: verifyProceduralClaimPrompt.promptVersion,
+    schemaVersion: verifyProceduralClaimPrompt.schemaVersion,
+    schemaName: "verify_procedural_claim_v1",
+    inputSchema: verifyProceduralClaimInputSchema,
+    outputSchema: verifyProceduralClaimOutputSchema,
+    maxCompletionTokens: 2500,
+    buildPromptInput: (input) => JSON.stringify(input),
+  },
+  "detect-claim-conflicts": {
+    name: "detect-claim-conflicts",
+    modelPurpose: "REASONING",
+    promptVersion: detectClaimConflictsPrompt.promptVersion,
+    schemaVersion: detectClaimConflictsPrompt.schemaVersion,
+    schemaName: "detect_claim_conflicts_v1",
+    inputSchema: claimConflictInputSchema,
+    outputSchema: claimConflictOutputSchema,
+    maxCompletionTokens: 1500,
+    buildPromptInput: (input) => JSON.stringify(input),
+  },
+  "analyze-case": {
+    name: "analyze-case",
+    modelPurpose: "REASONING",
+    promptVersion: analyzeCasePrompt.promptVersion,
+    schemaVersion: analyzeCasePrompt.schemaVersion,
+    schemaName: "analyze_case_v1",
+    inputSchema: caseAnalysisInputSchema,
+    outputSchema: caseAnalysisOutputSchema,
+    maxCompletionTokens: 3500,
     buildPromptInput: (input) => JSON.stringify(input),
   },
 } satisfies Record<string, AIOperationDefinition<z.ZodType, z.ZodType>>;

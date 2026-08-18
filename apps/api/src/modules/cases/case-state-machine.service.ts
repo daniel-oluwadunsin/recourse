@@ -48,6 +48,14 @@ export interface TransitionOptions {
   idempotencyKey?: string;
   payload?: Record<string, unknown>;
   expectedRevision?: number;
+  /**
+   * Workflow-owned projections that must commit with the status event.
+   * Controllers never receive this option.
+   */
+  setFields?: {
+    activeProcedureId?: Types.ObjectId | null;
+    activeProcedureVersionId?: Types.ObjectId | null;
+  };
 }
 
 @Injectable()
@@ -138,7 +146,11 @@ export class CaseStateMachineService {
           },
           {
             $inc: { revision: 1 },
-            $set: { currentStage: to, status: to },
+            $set: {
+              currentStage: to,
+              status: to,
+              ...options.setFields,
+            },
           },
           { returnDocument: "after", session },
         )

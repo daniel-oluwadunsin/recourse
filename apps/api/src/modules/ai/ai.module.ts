@@ -17,12 +17,14 @@ import { AIRunService } from "./ai-run.service";
 import { GroqProvider } from "./groq.provider";
 import { AIModelRouterService } from "./model-router.service";
 import { AIRun, AIRunSchema } from "./schemas/ai-run.schema";
+import { IntelligenceModule } from "../intelligence/intelligence.module";
 
 @Module({
   exports: [AIJobService, AIOperationService, AIRunService, GroqProvider],
   imports: [
     ConfigModule,
     forwardRef(() => CasesModule),
+    forwardRef(() => IntelligenceModule),
     MongooseModule.forFeature([
       { name: AIRun.name, schema: AIRunSchema },
       { name: Case.name, schema: CaseSchema },

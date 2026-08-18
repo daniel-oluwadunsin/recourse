@@ -6,6 +6,7 @@ import { type Model, Types } from "mongoose";
 import {
   type CaseEventJobPayload,
   type EvidenceProcessingJobPayload,
+  type ProcedureRetrievalJobPayload,
 } from "@recourse/contracts";
 
 import { CaseStateMachineService } from "../cases/case-state-machine.service";
@@ -103,6 +104,33 @@ export class CaseOrchestratorService {
         );
       }
     }
+    if (
+      event.type === "CLASSIFICATION_COMPLETE" ||
+      (event.type === "CASE_STATUS_CHANGED" &&
+        readPayloadString(event, "to") === "PROCEDURE_RESOLUTION")
+    ) {
+      const activeCase = await this.caseModel
+        .findOne({ _id: event.caseId, deletedAt: null })
+        .exec();
+      if (activeCase?.status === "PROCEDURE_RESOLUTION") {
+        const classificationHash = hashInput(event.payload);
+        const payload: ProcedureRetrievalJobPayload = {
+          caseId: activeCase._id.toString(),
+          correlationId: event.correlationId,
+          expectedRevision: activeCase.revision,
+          classificationHash,
+          queryHash: hashInput({
+            caseId: activeCase._id.toString(),
+            revision: activeCase.revision,
+            classificationHash,
+          }),
+          idempotencyKey: `procedure-resolve-${activeCase._id.toString()}-${activeCase.revision}-${classificationHash}`,
+          workflowVersion: WORKFLOW_VERSION,
+        };
+        await this.queueProducer.enqueueProcedureRetrieval(payload);
+        scheduled.push(`procedure-retrieval:${activeCase._id.toString()}`);
+      }
+    }
     if (event.type === "EVIDENCE_UPLOADED") {
       const evidenceId = readPayloadString(event, "evidenceId");
       if (evidenceId) {
@@ -139,6 +167,50 @@ export class CaseOrchestratorService {
           await this.queueProducer.enqueueEvidenceProcessing(evidencePayload);
           scheduled.push(`${QUEUE_NAMES.EVIDENCE_PROCESSING}:${evidence._id}`);
         }
+      }
+    }
+
+    if (event.type === "EVIDENCE_PROCESSED") {
+      const activeCase = await this.caseModel
+        .findOne({ _id: event.caseId, deletedAt: null })
+        .exec();
+      if (activeCase?.status === "EVIDENCE_COLLECTION") {
+        const transition = await this.stateMachine.transition(
+          activeCase._id.toString(),
+          "CASE_ANALYSIS",
+          {
+            actorId: null,
+            actorType: "SYSTEM",
+            correlationId: event.correlationId ?? undefined,
+          },
+          {
+            eventType: "CASE_STATUS_CHANGED",
+            expectedCurrent: ["EVIDENCE_COLLECTION"],
+            expectedRevision: activeCase.revision,
+            idempotencyKey: `case-analysis-start-${activeCase._id.toString()}-${activeCase.revision}`,
+            payload: {
+              triggerEventId: event._id.toString(),
+              to: "CASE_ANALYSIS",
+            },
+          },
+        );
+        const inputHash = hashInput({
+          caseId: transition.case._id.toString(),
+          revision: transition.case.revision,
+        });
+        await this.queueProducer.enqueueAIOperation({
+          caseId: transition.case._id.toString(),
+          correlationId: event.correlationId,
+          evidenceId: null,
+          expectedRevision: transition.case.revision,
+          idempotencyKey: `analyze-case-${transition.case._id.toString()}-${transition.case.revision}-${inputHash}`,
+          inputHash,
+          operation: "analyze-case",
+          workflowVersion: WORKFLOW_VERSION,
+        });
+        scheduled.push(
+          `ai-operations:analyze-case:${activeCase._id.toString()}`,
+        );
       }
     }
 

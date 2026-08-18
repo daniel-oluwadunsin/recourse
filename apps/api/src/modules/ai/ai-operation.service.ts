@@ -19,12 +19,32 @@ import {
   extractTimelineEventsInputSchema,
   extractTimelineEventsOutputSchema,
   type ExtractTimelineEventsOutput,
+  type ExtractProcedureInput,
+  extractProcedureInputSchema,
+  extractProcedureOutputSchema,
+  type ExtractProcedureOutput,
+  type VerifyProceduralClaimInput,
+  verifyProceduralClaimInputSchema,
+  verifyProceduralClaimOutputSchema,
+  type VerifyProceduralClaimOutput,
+  type ClaimConflictInput,
+  claimConflictInputSchema,
+  claimConflictOutputSchema,
+  type ClaimConflictOutput,
+  type CaseAnalysisInput,
+  caseAnalysisInputSchema,
+  caseAnalysisOutputSchema,
+  type CaseAnalysisOutput,
 } from "./operation-schemas";
 import { GroqProvider } from "./groq.provider";
 import { aiOperationRegistry } from "./operation-registry";
 import { classifyCasePrompt } from "./prompts/classify-case.v1";
 import { extractDocumentClaimsPrompt } from "./prompts/extract-document-claims.v1";
 import { extractTimelineEventsPrompt } from "./prompts/extract-timeline-events.v1";
+import { extractProcedurePrompt } from "./prompts/extract-procedure.v1";
+import { verifyProceduralClaimPrompt } from "./prompts/verify-procedural-claim.v1";
+import { detectClaimConflictsPrompt } from "./prompts/detect-claim-conflicts.v1";
+import { analyzeCasePrompt } from "./prompts/analyze-case.v1";
 
 export interface AIOperationResult<T> {
   output: T;
@@ -112,6 +132,139 @@ export class AIOperationService {
         );
         for (const event of output.events) {
           assertRefsAreSubset(event.evidenceBlockIds, allowed);
+        }
+      },
+    );
+  }
+
+  async extractProcedure(
+    input: ExtractProcedureInput,
+  ): Promise<AIOperationResult<ExtractProcedureOutput>> {
+    const parsed = extractProcedureInputSchema.parse(input);
+    const definition = aiOperationRegistry["extract-procedure"];
+    const allowed = new Set(
+      parsed.sources.flatMap((source) =>
+        source.paragraphs.map((paragraph) => paragraph.paragraphId),
+      ),
+    );
+    return this.execute(
+      definition,
+      parsed,
+      [
+        parsed.caseId,
+        ...parsed.sources.map((source) => source.sourceSnapshotId),
+      ],
+      extractProcedurePrompt.buildMessages(JSON.stringify(parsed)),
+      extractProcedureOutputSchema,
+      null,
+      (output) => {
+        for (const claim of output.claims) {
+          assertRefsAreSubset(claim.paragraphIds, allowed);
+          if (
+            !parsed.sources.some(
+              (source) => source.sourceSnapshotId === claim.sourceSnapshotId,
+            )
+          ) {
+            throw new AIProviderError(
+              "Procedure output referenced an unknown source.",
+              "OUTPUT_PROVENANCE_INVALID",
+              false,
+            );
+          }
+        }
+        for (const step of output.steps)
+          assertRefsAreSubset(step.paragraphIds, allowed);
+        for (const deadline of output.deadlines)
+          assertRefsAreSubset(deadline.paragraphIds, allowed);
+      },
+    );
+  }
+
+  async verifyProceduralClaim(
+    input: VerifyProceduralClaimInput,
+  ): Promise<AIOperationResult<VerifyProceduralClaimOutput>> {
+    const parsed = verifyProceduralClaimInputSchema.parse(input);
+    const definition = aiOperationRegistry["verify-procedural-claim"];
+    const allowedSources = new Set(
+      parsed.sources.map((source) => source.sourceSnapshotId),
+    );
+    const allowedParagraphs = new Set(
+      parsed.sources.flatMap((source) =>
+        source.paragraphs.map((paragraph) => paragraph.paragraphId),
+      ),
+    );
+    return this.execute(
+      definition,
+      parsed,
+      [
+        parsed.caseId,
+        ...parsed.sources.map((source) => source.sourceSnapshotId),
+      ],
+      verifyProceduralClaimPrompt.buildMessages(JSON.stringify(parsed)),
+      verifyProceduralClaimOutputSchema,
+      null,
+      (output) => {
+        if (
+          output.supportingSourceSnapshotId &&
+          !allowedSources.has(output.supportingSourceSnapshotId)
+        ) {
+          throw new AIProviderError(
+            "Verifier output referenced an unknown source.",
+            "OUTPUT_PROVENANCE_INVALID",
+            false,
+          );
+        }
+        assertRefsAreSubset(output.supportingParagraphIds, allowedParagraphs);
+        if (
+          output.verificationStatus === "SUPPORTED" &&
+          !output.supportingSourceSnapshotId
+        ) {
+          throw new AIProviderError(
+            "Supported claims require source provenance.",
+            "OUTPUT_PROVENANCE_INVALID",
+            false,
+          );
+        }
+      },
+    );
+  }
+
+  async detectClaimConflicts(
+    input: ClaimConflictInput,
+  ): Promise<AIOperationResult<ClaimConflictOutput>> {
+    const parsed = claimConflictInputSchema.parse(input);
+    const definition = aiOperationRegistry["detect-claim-conflicts"];
+    return this.execute(
+      definition,
+      parsed,
+      [parsed.caseId, parsed.claimA.claimId, parsed.claimB.claimId],
+      detectClaimConflictsPrompt.buildMessages(JSON.stringify(parsed)),
+      claimConflictOutputSchema,
+    );
+  }
+
+  async analyzeCase(
+    input: CaseAnalysisInput,
+  ): Promise<AIOperationResult<CaseAnalysisOutput>> {
+    const parsed = caseAnalysisInputSchema.parse(input);
+    const definition = aiOperationRegistry["analyze-case"];
+    return this.execute(
+      definition,
+      parsed,
+      [parsed.caseId, ...parsed.claims.map((claim) => claim.claimId)],
+      analyzeCasePrompt.buildMessages(JSON.stringify(parsed)),
+      caseAnalysisOutputSchema,
+      null,
+      (output) => {
+        const allowedClaims = new Set(
+          parsed.claims.map((claim) => claim.claimId),
+        );
+        if (output.supportedClaimIds.some((id) => !allowedClaims.has(id))) {
+          throw new AIProviderError(
+            "Case analysis referenced an unknown claim.",
+            "OUTPUT_PROVENANCE_INVALID",
+            false,
+          );
         }
       },
     );

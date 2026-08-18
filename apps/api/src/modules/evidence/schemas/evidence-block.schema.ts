@@ -53,6 +53,24 @@ export class EvidenceBlock {
   @Prop({ default: null, type: Object })
   metadata!: Record<string, unknown> | null;
 
+  @Prop({ default: null, type: [Number] })
+  embedding!: number[] | null;
+
+  @Prop({ default: null, type: String })
+  embeddingProvider!: string | null;
+
+  @Prop({ default: null, type: String })
+  embeddingModel!: string | null;
+
+  @Prop({ default: null, min: 1, type: Number })
+  embeddingDimensions!: number | null;
+
+  @Prop({ default: null, type: String })
+  embeddingHash!: string | null;
+
+  @Prop({ default: null, type: Date })
+  embeddedAt!: Date | null;
+
   createdAt!: Date;
   updatedAt!: Date;
 }
@@ -72,4 +90,8 @@ EvidenceBlockSchema.index(
 EvidenceBlockSchema.index(
   { ownerId: 1, evidenceId: 1 },
   { name: "evidence_blocks_owner_evidence" },
+);
+EvidenceBlockSchema.index(
+  { caseId: 1, normalizedText: "text", text: "text" },
+  { name: "evidence_blocks_case_lexical" },
 );

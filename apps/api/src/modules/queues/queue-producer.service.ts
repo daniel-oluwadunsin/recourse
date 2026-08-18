@@ -11,6 +11,8 @@ import {
   type EvidenceProcessingJobPayload,
   maintenanceJobPayloadSchema,
   type MaintenanceJobPayload,
+  procedureRetrievalJobPayloadSchema,
+  type ProcedureRetrievalJobPayload,
   type QueueJobPayload,
   type QueueName,
 } from "@recourse/contracts";
@@ -69,6 +71,24 @@ export class QueueProducerService implements OnApplicationShutdown {
     const jobId = stableJobId("maintenance", parsed.idempotencyKey);
     await this.queue(QUEUE_NAMES.MAINTENANCE).add(
       JOB_NAMES.MAINTENANCE_RECONCILE_DISPATCHES,
+      parsed,
+      { jobId },
+    );
+    return { duplicateSafe: true, jobId };
+  }
+
+  async enqueueProcedureRetrieval(
+    payload: ProcedureRetrievalJobPayload,
+  ): Promise<{ jobId: string; duplicateSafe: true }> {
+    const parsed = procedureRetrievalJobPayloadSchema.parse(payload);
+    const jobId = stableJobId(
+      "procedure-resolve",
+      parsed.caseId,
+      parsed.expectedRevision.toString(),
+      parsed.queryHash,
+    );
+    await this.queue(QUEUE_NAMES.PROCEDURE_RETRIEVAL).add(
+      JOB_NAMES.PROCEDURE_RETRIEVE,
       parsed,
       { jobId },
     );

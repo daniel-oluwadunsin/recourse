@@ -255,28 +255,59 @@ GROQ_REQUEST_TIMEOUT_MS=
 
 ```bash
 TAVILY_API_KEY=
+TAVILY_PROJECT_ID=
+TAVILY_SEARCH_DEPTH=advanced
+TAVILY_EXTRACT_DEPTH=advanced
 TAVILY_SEARCH_MAX_RESULTS=8
-TAVILY_MAX_QUERIES_PER_PROCEDURE=5
+TAVILY_MAX_QUERIES_PER_PROCEDURE=3
+TAVILY_MAX_EXTRACT_PAGES=8
 TAVILY_CRAWL_MAX_DEPTH=2
+TAVILY_CRAWL_MAX_BREADTH=20
 TAVILY_CRAWL_MAX_PAGES=20
 TAVILY_INCLUDE_USAGE=true
+TAVILY_REQUEST_TIMEOUT_SECONDS=60
+TAVILY_MAX_CREDITS_PER_PROCEDURE=20
+TAVILY_USAGE_CACHE_TTL_MS=600000
+PROCEDURE_CACHE_TTL_HOURS=24
+PROCEDURE_STALE_AFTER_HOURS=168
+PROCEDURE_MIN_CONFIDENCE=0.65
+PROCEDURE_MAX_CLAIMS=50
 ```
 
 Tune values by cost/quality; they are application budgets, not provider claims.
 
 ## 2.7 Embeddings
 
-If using app-managed provider:
+Phase 8 uses the replaceable `EmbeddingProvider` abstraction with the real
+Voyage HTTP API. The selected production model is `voyage-4-lite` with 1024
+dimensions. Voyage data-retention and zero-day-retention settings must be
+configured in the Voyage organization dashboard before sending sensitive
+evidence.
 
 ```bash
 EMBEDDING_PROVIDER=voyage
 EMBEDDING_API_KEY=
-EMBEDDING_MODEL=
-EMBEDDING_DIMENSIONS=
-EMBEDDING_BATCH_SIZE=
+EMBEDDING_MODEL=voyage-4-lite
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_BATCH_SIZE=64
+EMBEDDING_REQUEST_TIMEOUT_MS=30000
+EMBEDDING_MAX_RETRIES=2
+EMBEDDING_RETRY_BASE_DELAY_MS=500
+VECTOR_SEARCH_INDEX_EVIDENCE=evidence_blocks_vector
+VECTOR_SEARCH_INDEX_PROCEDURE=procedure_source_chunks_vector
+ATLAS_SEARCH_INDEX_EVIDENCE=evidence_blocks_lexical
+ATLAS_SEARCH_INDEX_PROCEDURE=procedure_source_chunks_lexical
+VECTOR_SEARCH_NUM_CANDIDATES=200
+VECTOR_SEARCH_LIMIT=20
+INTELLIGENCE_MAX_EVIDENCE_PER_ANALYSIS=25
+INTELLIGENCE_MAX_BLOCKS_PER_EVIDENCE=100
+INTELLIGENCE_MAX_CLAIMS_PER_ANALYSIS=250
+INTELLIGENCE_MAX_CONTRADICTION_PAIRS=100
 ```
 
-If Atlas automated embeddings are used instead, remove unused secrets and document Atlas configuration.
+Do not expose `EMBEDDING_API_KEY` to the browser. If the embedding model or
+dimensions change, create new vector indexes and re-embed all affected
+documents before switching the active configuration.
 
 ## 2.8 Object storage
 
@@ -444,12 +475,23 @@ Avoid using organization-owner/admin credentials in the application URI.
 
 ## 4.3 Vector Search indexes
 
-The final index definitions depend on embedding dimensions and schema. Codex must generate scripts/JSON definitions from the actual implementation.
+The checked-in `scripts/atlas-vector-indexes.ts` creates or verifies the exact
+Atlas Search and Vector Search indexes for the selected model/dimensions:
 
 At minimum expect separate indexes for:
 
 - private `evidence_blocks` vector + metadata fields (`caseId`, `evidenceId`, type/date);
 - procedure/source chunks with metadata (`procedureId`, `institutionId`, `jurisdiction`, `authorityTier`, version).
+
+Run:
+
+```bash
+pnpm atlas:indexes
+```
+
+The command uses `MONGODB_URI`, fails if Atlas Search index administration is
+not permitted, and never reports an index ready until Atlas returns it from
+`$listSearchIndexes`.
 
 The application should expose an index verification script that fails clearly when expected indexes are absent.
 
