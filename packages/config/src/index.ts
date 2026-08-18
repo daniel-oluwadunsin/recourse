@@ -72,6 +72,42 @@ const baseEnvironmentSchema = z.object({
   QUEUE_AI_CONCURRENCY: z.coerce.number().int().min(1).default(5),
   QUEUE_NOTIFICATION_CONCURRENCY: z.coerce.number().int().min(1).default(10),
   QUEUE_EXTERNAL_ACTION_CONCURRENCY: z.coerce.number().int().min(1).default(2),
+  QUEUE_MAINTENANCE_CONCURRENCY: z.coerce.number().int().min(1).default(1),
+  QUEUE_DISPATCH_INTERVAL_MS: z.coerce.number().int().min(1000).default(5000),
+  QUEUE_DEFAULT_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(3),
+  QUEUE_BACKOFF_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .max(3600000)
+    .default(1000),
+  QUEUE_COMPLETED_RETENTION: z.coerce.number().int().min(0).default(100),
+  QUEUE_FAILED_RETENTION: z.coerce.number().int().min(1).default(1000),
+  QUEUE_STALLED_INTERVAL_MS: z.coerce.number().int().min(1000).default(30000),
+  QUEUE_PROCEDURE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(30),
+  QUEUE_PROCEDURE_RATE_LIMIT_DURATION_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(60000),
+  QUEUE_AI_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(60),
+  QUEUE_AI_RATE_LIMIT_DURATION_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(60000),
+  QUEUE_EXTERNAL_ACTION_RATE_LIMIT_MAX: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(5),
+  QUEUE_EXTERNAL_ACTION_RATE_LIMIT_DURATION_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(60000),
+  REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).default(10000),
+  REDIS_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(100).default(5000),
 
   MONGODB_URI: optionalString,
   MONGODB_DATABASE: z.string().min(1).default("recourse"),
@@ -184,6 +220,9 @@ const baseEnvironmentSchema = z.object({
     .int()
     .min(1000)
     .default(30000),
+  WORKER_HEARTBEAT_STALE_MS: z.coerce.number().int().min(1000).default(90000),
+  SSE_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().min(1000).default(15000),
+  SSE_RETRY_MS: z.coerce.number().int().min(1000).default(5000),
 });
 
 export const environmentSchema = baseEnvironmentSchema.superRefine(

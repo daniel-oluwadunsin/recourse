@@ -4,11 +4,15 @@ import { SkipThrottle } from "@nestjs/throttler";
 import { type Connection } from "mongoose";
 
 import { type HealthResponse } from "@recourse/contracts";
+import { QueueHealthService } from "../queues/queue-health.service";
 
 @Controller("health")
 @SkipThrottle()
 export class HealthController {
-  constructor(@InjectConnection() private readonly connection: Connection) {}
+  constructor(
+    @InjectConnection() private readonly connection: Connection,
+    private readonly queueHealth: QueueHealthService,
+  ) {}
 
   @Get("live")
   live(): HealthResponse {
@@ -23,11 +27,25 @@ export class HealthController {
 
     try {
       await this.connection.db.command({ ping: 1 });
+      await this.queueHealth.ping();
     } catch {
       throw new ServiceUnavailableException("Service is not ready.");
     }
 
-    return this.response({ mongo: "ok" });
+    return this.response({ mongo: "ok", redis: "ok" });
+  }
+
+  @Get("worker")
+  async worker(): Promise<HealthResponse> {
+    try {
+      if (!(await this.queueHealth.workerHeartbeat())) {
+        throw new Error("Worker heartbeat is stale.");
+      }
+    } catch {
+      throw new ServiceUnavailableException("Worker is not ready.");
+    }
+
+    return this.response({ worker: "ok" });
   }
 
   private response(checks: Record<string, "ok"> = {}): HealthResponse {

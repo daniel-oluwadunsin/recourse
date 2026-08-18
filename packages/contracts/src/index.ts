@@ -329,3 +329,73 @@ export const readinessFactorSchema = z.object({
   reason: z.string().max(1000),
 });
 export type ReadinessFactor = z.infer<typeof readinessFactorSchema>;
+
+export const queueNameValues = [
+  "case-orchestration",
+  "procedure-retrieval",
+  "evidence-processing",
+  "ai-operations",
+  "notifications",
+  "external-actions",
+  "maintenance",
+] as const;
+
+export const queueNameSchema = z.enum(queueNameValues);
+export type QueueName = z.infer<typeof queueNameSchema>;
+
+export const queueRetryCategoryValues = [
+  "TRANSIENT",
+  "RATE_LIMITED",
+  "INVALID_INPUT",
+  "UNSUPPORTED",
+  "PROVIDER_SCHEMA",
+  "DELETED_RESOURCE",
+  "CONSEQUENTIAL_ACTION",
+  "UNKNOWN",
+] as const;
+
+export const queueRetryCategorySchema = z.enum(queueRetryCategoryValues);
+export type QueueRetryCategory = z.infer<typeof queueRetryCategorySchema>;
+
+export const queueJobPayloadSchema = z.object({
+  correlationId: z.string().max(200).nullable(),
+  idempotencyKey: z.string().min(1).max(200),
+  workflowVersion: z.string().min(1).max(50),
+});
+export type QueueJobPayload = z.infer<typeof queueJobPayloadSchema>;
+
+export const caseEventJobPayloadSchema = queueJobPayloadSchema.extend({
+  dispatchId: z.string().min(1),
+  eventId: z.string().min(1),
+  caseId: z.string().min(1),
+  eventSequence: z.number().int().positive(),
+});
+export type CaseEventJobPayload = z.infer<typeof caseEventJobPayloadSchema>;
+
+export const evidenceProcessingJobPayloadSchema = queueJobPayloadSchema.extend({
+  evidenceId: z.string().min(1),
+  caseId: z.string().min(1),
+  expectedRevision: z.number().int().nonnegative(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type EvidenceProcessingJobPayload = z.infer<
+  typeof evidenceProcessingJobPayloadSchema
+>;
+
+export const maintenanceJobPayloadSchema = queueJobPayloadSchema.extend({
+  requestedAt: z.coerce.date(),
+});
+export type MaintenanceJobPayload = z.infer<typeof maintenanceJobPayloadSchema>;
+
+export const queueFailureMetadataSchema = z.object({
+  queue: queueNameSchema,
+  jobId: z.string().min(1),
+  jobName: z.string().min(1),
+  category: queueRetryCategorySchema,
+  code: z.string().min(1).max(100),
+  message: z.string().min(1).max(500),
+  attemptsMade: z.number().int().nonnegative(),
+  caseId: z.string().nullable(),
+  evidenceId: z.string().nullable(),
+});
+export type QueueFailureMetadata = z.infer<typeof queueFailureMetadataSchema>;

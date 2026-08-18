@@ -15,6 +15,8 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { CasesModule } from "./modules/cases/cases.module";
 import { EvidenceModule } from "./modules/evidence/evidence.module";
 import { HealthModule } from "./modules/health/health.module";
+import { AdminModule } from "./modules/admin/admin.module";
+import { QueuesModule } from "./modules/queues/queues.module";
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { HealthModule } from "./modules/health/health.module";
     AuthModule,
     CasesModule,
     EvidenceModule,
+    QueuesModule,
+    AdminModule,
     HealthModule,
   ],
   providers: [

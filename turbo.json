@@ -19,7 +19,10 @@
         "MONGODB_DATABASE",
         "MONGODB_URI",
         "NODE_ENV",
-        "RATE_LIMIT_STORAGE"
+        "RATE_LIMIT_STORAGE",
+        "REDIS_URL",
+        "REDIS_PREFIX",
+        "WORKER_NAME"
       ]
     },
     "check-types": {

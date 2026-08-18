@@ -42,6 +42,14 @@ import {
   EvidenceBlock,
   EvidenceBlockSchema,
 } from "../modules/evidence/schemas/evidence-block.schema";
+import {
+  JobFailure,
+  JobFailureSchema,
+} from "../modules/queues/schemas/job-failure.schema";
+import {
+  WorkflowDispatch,
+  WorkflowDispatchSchema,
+} from "../modules/queues/schemas/workflow-dispatch.schema";
 
 const environment = parseEnvironment();
 
@@ -108,6 +116,16 @@ async function createAndVerifyIndexes(): Promise<void> {
         collection: "audit_logs",
         name: AuditLog.name,
         schema: AuditLogSchema,
+      },
+      {
+        collection: "workflow_dispatches",
+        name: WorkflowDispatch.name,
+        schema: WorkflowDispatchSchema,
+      },
+      {
+        collection: "job_failures",
+        name: JobFailure.name,
+        schema: JobFailureSchema,
       },
     ];
 

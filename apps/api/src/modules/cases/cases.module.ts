@@ -10,6 +10,7 @@ import {
   EvidenceBlockSchema,
 } from "../evidence/schemas/evidence-block.schema";
 import { CaseEventService } from "./case-events.service";
+import { CaseActivityService } from "./case-activity.service";
 import { CasesController } from "./cases.controller";
 import { CasesService } from "./cases.service";
 import { CaseStateMachineService } from "./case-state-machine.service";
@@ -19,11 +20,17 @@ import { Deadline, DeadlineSchema } from "./schemas/deadline.schema";
 import { Decision, DecisionSchema } from "./schemas/decision.schema";
 import { Institution, InstitutionSchema } from "./schemas/institution.schema";
 import { InstitutionLookupService } from "./institutions.service";
+import { QueuesModule } from "../queues/queues.module";
+import {
+  WorkflowDispatch,
+  WorkflowDispatchSchema,
+} from "../queues/schemas/workflow-dispatch.schema";
 
 @Module({
   controllers: [CasesController],
   exports: [
     CaseEventService,
+    CaseActivityService,
     CasesService,
     CaseStateMachineService,
     InstitutionLookupService,
@@ -39,11 +46,14 @@ import { InstitutionLookupService } from "./institutions.service";
       { name: Deadline.name, schema: DeadlineSchema },
       { name: Evidence.name, schema: EvidenceSchema },
       { name: EvidenceBlock.name, schema: EvidenceBlockSchema },
+      { name: WorkflowDispatch.name, schema: WorkflowDispatchSchema },
     ]),
     StorageModule,
+    QueuesModule,
   ],
   providers: [
     CaseEventService,
+    CaseActivityService,
     CasesService,
     CaseStateMachineService,
     InstitutionLookupService,

@@ -4,6 +4,29 @@
   "private": true,
   "type": "commonjs",
   "main": "dist/main.js",
+  "exports": {
+    ".": "./dist/main.js",
+    "./worker-domain": {
+      "types": "./dist/worker-domain.module.d.ts",
+      "require": "./dist/worker-domain.module.js",
+      "default": "./dist/worker-domain.module.js"
+    },
+    "./queues": {
+      "types": "./dist/modules/queues/queues.module.d.ts",
+      "require": "./dist/modules/queues/queues.module.js",
+      "default": "./dist/modules/queues/queues.module.js"
+    },
+    "./queue-constants": {
+      "types": "./dist/modules/queues/queue.constants.d.ts",
+      "require": "./dist/modules/queues/queue.constants.js",
+      "default": "./dist/modules/queues/queue.constants.js"
+    },
+    "./redis-options": {
+      "types": "./dist/modules/queues/redis-options.d.ts",
+      "require": "./dist/modules/queues/redis-options.js",
+      "default": "./dist/modules/queues/redis-options.js"
+    }
+  },
   "files": [
     "dist",
     "nest-cli.json"
@@ -11,6 +34,7 @@
   "scripts": {
     "build": "nest build",
     "db:indexes": "node --env-file ../../.env --import tsx src/database/indexes.ts",
+    "admin:grant": "node --env-file ../../.env --import tsx src/database/grant-admin.ts",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch --env-file ../../.env",
     "start:prod": "node dist/main.js",
@@ -19,6 +43,7 @@
   },
   "dependencies": {
     "@nest-lab/throttler-storage-redis": "1.2.0",
+    "@nestjs/bullmq": "11.0.5",
     "@nestjs/common": "11.2.1",
     "@nestjs/config": "4.0.4",
     "@nestjs/core": "11.2.1",
@@ -32,6 +57,7 @@
     "@recourse/logger": "workspace:*",
     "@recourse/observability": "workspace:*",
     "argon2": "0.45.1",
+    "bullmq": "6.1.2",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "cloudinary": "2.10.0",

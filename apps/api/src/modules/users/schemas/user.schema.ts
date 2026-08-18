@@ -7,6 +7,12 @@ export enum UserStatus {
   DELETION_PENDING = "DELETION_PENDING",
 }
 
+export enum UserRole {
+  USER = "USER",
+  STAFF = "STAFF",
+  ADMIN = "ADMIN",
+}
+
 @Schema({ collection: "users", timestamps: true })
 export class User {
   @Prop({ required: true, trim: true, type: String })
@@ -25,6 +31,14 @@ export class User {
     type: String,
   })
   status!: UserStatus;
+
+  @Prop({
+    default: UserRole.USER,
+    enum: Object.values(UserRole),
+    required: true,
+    type: String,
+  })
+  role!: UserRole;
 
   createdAt!: Date;
   updatedAt!: Date;

@@ -12,6 +12,7 @@ import { CaseEvent, type CaseEventDocument } from "./schemas/case-event.schema";
 import { Case } from "./schemas/case.schema";
 import { type AppendCaseEventInput } from "./cases.types";
 import { CaseTombstonedError } from "./cases.errors";
+import { WorkflowDispatchService } from "../queues/workflow-dispatch.service";
 
 @Injectable()
 export class CaseEventService {
@@ -20,6 +21,7 @@ export class CaseEventService {
     @InjectModel(Case.name) private readonly caseModel: Model<Case>,
     @InjectModel(CaseEvent.name)
     private readonly caseEventModel: Model<CaseEvent>,
+    private readonly workflowDispatchService: WorkflowDispatchService,
   ) {}
 
   async append(input: AppendCaseEventInput): Promise<CaseEventDocument> {
@@ -105,6 +107,8 @@ export class CaseEventService {
     if (!event) {
       throw new Error("Case event creation returned no document");
     }
+
+    await this.workflowDispatchService.recordCaseEvent(event, session);
 
     return event;
   }

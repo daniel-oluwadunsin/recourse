@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { ConfigService } from "@nestjs/config";
+import { getModelToken } from "@nestjs/mongoose";
 import { type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { type Model } from "mongoose";
 import request from "supertest";
 
 import { type EnvironmentConfig } from "@recourse/config";
@@ -14,6 +16,7 @@ import { CaseEventService } from "./case-events.service";
 import { CaseStateMachineService } from "./case-state-machine.service";
 import { CaseTombstonedError } from "./cases.errors";
 import { InstitutionLookupService } from "./institutions.service";
+import { User, UserRole } from "../users/schemas/user.schema";
 
 vi.hoisted(() => {
   process.env.APP_ENV = "test";
@@ -170,6 +173,13 @@ describe("case domain and deterministic workflow", () => {
       .delete(`/api/v1/cases/${primaryCaseId}`)
       .set("Authorization", `Bearer ${userB}`)
       .expect(404);
+    await request(testApp.getHttpServer())
+      .get(`/api/v1/cases/${primaryCaseId}/events/stream`)
+      .set("Authorization", `Bearer ${userB}`)
+      .expect(404);
+    await request(testApp.getHttpServer())
+      .get(`/api/v1/cases/${primaryCaseId}/events/stream`)
+      .expect(401);
   });
 
   it("allocates monotonic sequences and replays duplicate events idempotently", async () => {
@@ -252,6 +262,31 @@ describe("case domain and deterministic workflow", () => {
     const unknown = await institutions.lookup("Model Invented Institution");
     expect(unknown.institution).toBeNull();
     expect(unknown.matchedBy).toBe("NONE");
+  });
+
+  it("protects queue operations with staff RBAC and records safe health metadata", async () => {
+    const users = testApp.get<Model<User>>(getModelToken(User.name));
+    await users.updateOne(
+      { email: "case-owner-a@example.com" },
+      { $set: { role: UserRole.STAFF } },
+    );
+
+    const staffResponse = await request(testApp.getHttpServer())
+      .get("/api/v1/admin/queues/health")
+      .set("Authorization", `Bearer ${primaryAccessToken}`)
+      .expect(200);
+    expect(staffResponse.body.queues).toHaveLength(7);
+    expect(staffResponse.body.queues[0]).toHaveProperty("oldestWaitingAgeMs");
+
+    await request(testApp.getHttpServer())
+      .get("/api/v1/admin/queues/failures")
+      .set("Authorization", `Bearer ${userB}`)
+      .expect(403);
+
+    await users.updateOne(
+      { email: "case-owner-a@example.com" },
+      { $set: { role: UserRole.USER } },
+    );
   });
 
   it("tombstones deleted cases and rejects late workflow transitions", async () => {

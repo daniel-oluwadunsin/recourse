@@ -8,9 +8,12 @@ import {
   Param,
   Patch,
   Post,
+  Req,
+  Res,
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { type Request, type Response } from "express";
 
 import { getRequestContext } from "@recourse/logger";
 
@@ -18,6 +21,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { AccessTokenGuard } from "../auth/guards/access-token.guard";
 import { type AuthenticatedUser } from "../auth/auth.types";
 import { CasesService } from "./cases.service";
+import { CaseActivityService } from "./case-activity.service";
 import {
   type CaseActor,
   type CreateCaseInput,
@@ -31,7 +35,10 @@ import { UpdateCaseDto } from "./dto/update-case.dto";
 @Controller("cases")
 @UseGuards(AccessTokenGuard)
 export class CasesController {
-  constructor(private readonly casesService: CasesService) {}
+  constructor(
+    private readonly casesService: CasesService,
+    private readonly caseActivityService: CaseActivityService,
+  ) {}
 
   @Post()
   async create(
@@ -68,6 +75,21 @@ export class CasesController {
       cursor: query.cursor,
       limit: query.limit,
     });
+  }
+
+  @Get(":caseId/events/stream")
+  async eventsStream(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("caseId") caseId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    await this.caseActivityService.stream(
+      currentUser.userId,
+      caseId,
+      request,
+      response,
+    );
   }
 
   @Get(":caseId")

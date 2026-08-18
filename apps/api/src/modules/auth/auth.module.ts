@@ -14,12 +14,13 @@ import { AuthTokenSchema } from "./schemas/auth-token.schema";
 import { RefreshToken } from "./schemas/refresh-token.schema";
 import { RefreshTokenSchema } from "./schemas/refresh-token.schema";
 import { AccessTokenGuard } from "./guards/access-token.guard";
+import { StaffGuard } from "./guards/staff.guard";
 import { PasswordService } from "./password.service";
 import { AuthTokenService } from "./token.service";
 
 @Module({
   controllers: [AuthController],
-  exports: [AccessTokenGuard, AuthService, JwtModule, UsersModule],
+  exports: [AccessTokenGuard, AuthService, JwtModule, StaffGuard, UsersModule],
   imports: [
     ConfigModule,
     JwtModule.registerAsync({
@@ -36,6 +37,12 @@ import { AuthTokenService } from "./token.service";
     AuditModule,
     UsersModule,
   ],
-  providers: [AuthService, AuthTokenService, PasswordService, AccessTokenGuard],
+  providers: [
+    AuthService,
+    AuthTokenService,
+    PasswordService,
+    AccessTokenGuard,
+    StaffGuard,
+  ],
 })
 export class AuthModule {}
