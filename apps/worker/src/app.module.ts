@@ -18,6 +18,8 @@ import { WorkerQueueConfigService } from "./worker-queue-config.service";
 import { AIModule } from "api/ai";
 import { AIOperationsProcessor } from "./processors/ai-operations.processor";
 import { ProcedureRetrievalProcessor } from "./processors/procedure-retrieval.processor";
+import { EmailModule } from "api/email";
+import { NotificationProcessor } from "./processors/notification.processor";
 
 @Module({
   imports: [
@@ -38,6 +40,7 @@ import { ProcedureRetrievalProcessor } from "./processors/procedure-retrieval.pr
     QueuesModule,
     WorkerDomainModule,
     AIModule,
+    EmailModule,
   ],
   providers: [
     {
@@ -55,6 +58,7 @@ import { ProcedureRetrievalProcessor } from "./processors/procedure-retrieval.pr
     MaintenanceProcessor,
     AIOperationsProcessor,
     ProcedureRetrievalProcessor,
+    NotificationProcessor,
     QueueFailureObserver,
     WorkerHeartbeatService,
     WorkerQueueConfigService,

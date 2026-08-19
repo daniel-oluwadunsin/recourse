@@ -190,6 +190,58 @@ export class CloudinaryStorageProvider implements StorageProvider {
     }
   }
 
+  async uploadObject(input: {
+    storageKey: string;
+    bytes: Buffer;
+    contentType: string;
+  }): Promise<StoredObjectMetadata> {
+    this.assertConfigured();
+    assertOpaqueStorageKey(input.storageKey);
+
+    try {
+      const response = await new Promise<CloudinaryResourceResponse>(
+        (resolve, reject) => {
+          const upload = cloudinary.uploader.upload_stream(
+            {
+              context: { content_type: input.contentType },
+              overwrite: false,
+              public_id: input.storageKey,
+              resource_type: "raw",
+              type: "authenticated",
+            },
+            (error, result) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve((result ?? {}) as CloudinaryResourceResponse);
+            },
+          );
+          Readable.from(input.bytes).pipe(upload);
+        },
+      );
+      if (
+        response.public_id !== input.storageKey ||
+        response.resource_type !== "raw" ||
+        typeof response.bytes !== "number"
+      ) {
+        throw new StorageProviderError(
+          "Cloudinary returned incomplete upload metadata.",
+          "PROVIDER_ERROR",
+        );
+      }
+      return this.toMetadata(response, input.storageKey, input.contentType);
+    } catch (error) {
+      if (error instanceof StorageProviderError) {
+        throw error;
+      }
+      throw new StorageProviderError(
+        "Cloudinary object upload failed.",
+        "PROVIDER_ERROR",
+      );
+    }
+  }
+
   async healthCheck(): Promise<StorageHealth> {
     if (!this.configured) {
       return {

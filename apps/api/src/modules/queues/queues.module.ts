@@ -23,6 +23,11 @@ import { Evidence, EvidenceSchema } from "../evidence/schemas/evidence.schema";
 import { Decision, DecisionSchema } from "../cases/schemas/decision.schema";
 import { JobFailure, JobFailureSchema } from "./schemas/job-failure.schema";
 import { CasesModule } from "../cases/cases.module";
+import {
+  CaseResponse,
+  CaseResponseSchema,
+} from "../email/schemas/case-response.schema";
+import { EmailModule } from "../email/email.module";
 
 @Module({
   exports: [
@@ -36,6 +41,7 @@ import { CasesModule } from "../cases/cases.module";
   imports: [
     ConfigModule,
     forwardRef(() => CasesModule),
+    forwardRef(() => EmailModule),
     MongooseModule.forFeature([
       { name: WorkflowDispatch.name, schema: WorkflowDispatchSchema },
       { name: Case.name, schema: CaseSchema },
@@ -43,6 +49,7 @@ import { CasesModule } from "../cases/cases.module";
       { name: Evidence.name, schema: EvidenceSchema },
       { name: Decision.name, schema: DecisionSchema },
       { name: JobFailure.name, schema: JobFailureSchema },
+      { name: CaseResponse.name, schema: CaseResponseSchema },
     ]),
   ],
   providers: [

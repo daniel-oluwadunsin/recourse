@@ -10,7 +10,10 @@ import { configureHttpApplication } from "./app-configure";
 import { AppModule } from "./app.module";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
   const config = app.get<ConfigService<EnvironmentConfig>>(ConfigService);
   const logger = app.get(RecourseLogger);
 

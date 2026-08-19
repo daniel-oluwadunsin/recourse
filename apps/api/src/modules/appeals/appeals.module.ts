@@ -8,6 +8,7 @@ import { AuthModule } from "../auth/auth.module";
 import { Case, CaseSchema } from "../cases/schemas/case.schema";
 import { CaseEvent, CaseEventSchema } from "../cases/schemas/case-event.schema";
 import { CasesModule } from "../cases/cases.module";
+import { EmailModule } from "../email/email.module";
 import { Evidence, EvidenceSchema } from "../evidence/schemas/evidence.schema";
 import {
   EvidenceBlock,
@@ -57,6 +58,7 @@ import { CaseAction, CaseActionSchema } from "./schemas/case-action.schema";
     AuthModule,
     AuditModule,
     forwardRef(() => CasesModule),
+    EmailModule,
     MongooseModule.forFeature([
       { name: Case.name, schema: CaseSchema },
       { name: CaseEvent.name, schema: CaseEventSchema },

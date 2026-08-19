@@ -11,6 +11,8 @@ import {
   type EvidenceProcessingJobPayload,
   maintenanceJobPayloadSchema,
   type MaintenanceJobPayload,
+  notificationJobPayloadSchema,
+  type NotificationJobPayload,
   procedureRetrievalJobPayloadSchema,
   type ProcedureRetrievalJobPayload,
   type QueueJobPayload,
@@ -132,6 +134,22 @@ export class QueueProducerService implements OnApplicationShutdown {
     await this.queue(queueName).add(jobName, parsed, {
       jobId: stableJobId(jobId),
     });
+  }
+
+  async enqueueNotification(
+    payload: NotificationJobPayload,
+    delay = 0,
+  ): Promise<{ jobId: string; duplicateSafe: true }> {
+    const parsed = notificationJobPayloadSchema.parse(payload);
+    const jobId = stableJobId("notification", parsed.idempotencyKey);
+    await this.queue(QUEUE_NAMES.NOTIFICATIONS).add(
+      parsed.kind === "DEADLINE_REMINDER"
+        ? JOB_NAMES.DEADLINE_REMINDER
+        : JOB_NAMES.NOTIFICATION_SEND,
+      parsed,
+      { delay, jobId },
+    );
+    return { duplicateSafe: true, jobId };
   }
 
   async ensureMaintenanceScheduler(): Promise<void> {

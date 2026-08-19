@@ -219,6 +219,7 @@ export const caseEventTypeValues = [
   "PROCEDURE_RESOLVED",
   "CASE_ANALYSIS_COMPLETED",
   "RESPONSE_RECEIVED",
+  "RESPONSE_ANALYZED",
   "CASE_REPLANNING",
   "CASE_RESOLVED",
   "CASE_EXHAUSTED",
@@ -240,6 +241,11 @@ export const caseEventTypeValues = [
   "ACTION_COMPLETED",
   "ACTION_VERIFICATION_FAILED",
   "ACTION_CANCELLED",
+  "DEADLINE_CREATED",
+  "DEADLINE_CHANGED",
+  "DEADLINE_EXPIRED",
+  "NOTIFICATION_CREATED",
+  "NOTIFICATION_SENT",
 ] as const;
 
 export const caseEventTypeSchema = z.enum(caseEventTypeValues);
@@ -442,11 +448,51 @@ export const deadlineStatusValues = [
   "OPEN",
   "COMPLETED",
   "EXPIRED",
+  "CONFLICTED",
   "UNKNOWN",
 ] as const;
 
 export const deadlineStatusSchema = z.enum(deadlineStatusValues);
 export type DeadlineStatus = z.infer<typeof deadlineStatusSchema>;
+
+export const responseOutcomeValues = [
+  "APPROVED",
+  "REJECTED",
+  "MORE_INFO",
+  "PARTIAL",
+  "UNKNOWN",
+] as const;
+export const responseOutcomeSchema = z.enum(responseOutcomeValues);
+export type ResponseOutcome = z.infer<typeof responseOutcomeSchema>;
+
+export const responseAssociationStatusValues = [
+  "ASSOCIATED",
+  "UNRELATED",
+  "AMBIGUOUS",
+] as const;
+export const responseAssociationStatusSchema = z.enum(
+  responseAssociationStatusValues,
+);
+export type ResponseAssociationStatus = z.infer<
+  typeof responseAssociationStatusSchema
+>;
+
+export const responseProcessingStatusValues = [
+  "RECEIVED",
+  "ANALYZING",
+  "ANALYZED",
+  "FAILED",
+] as const;
+export const responseProcessingStatusSchema = z.enum(
+  responseProcessingStatusValues,
+);
+export type ResponseProcessingStatus = z.infer<
+  typeof responseProcessingStatusSchema
+>;
+
+export const notificationChannelValues = ["IN_APP", "EMAIL"] as const;
+export const notificationChannelSchema = z.enum(notificationChannelValues);
+export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
 
 export const businessDayRuleValues = [
   "CALENDAR_DAYS",
@@ -581,6 +627,8 @@ export const aiOperationNameValues = [
   "verify-procedural-claim",
   "detect-claim-conflicts",
   "analyze-case",
+  "analyze-response",
+  "replan-case",
 ] as const;
 
 export const aiOperationNameSchema = z.enum(aiOperationNameValues);
@@ -600,10 +648,28 @@ export const aiOperationJobPayloadSchema = queueJobPayloadSchema.extend({
   operation: aiOperationNameSchema,
   caseId: z.string().min(1).nullable(),
   evidenceId: z.string().min(1).nullable(),
+  responseId: z.string().min(1).nullable().optional(),
   expectedRevision: z.number().int().nonnegative().nullable(),
   inputHash: z.string().regex(/^[a-f0-9]{64}$/),
 });
 export type AIOperationJobPayload = z.infer<typeof aiOperationJobPayloadSchema>;
+
+export const notificationJobKindValues = [
+  "OUTBOUND_EMAIL",
+  "DEADLINE_REMINDER",
+] as const;
+export const notificationJobKindSchema = z.enum(notificationJobKindValues);
+export type NotificationJobKind = z.infer<typeof notificationJobKindSchema>;
+
+export const notificationJobPayloadSchema = queueJobPayloadSchema.extend({
+  kind: notificationJobKindSchema,
+  notificationId: z.string().min(1).nullable(),
+  outboundEmailId: z.string().min(1).nullable(),
+  deadlineId: z.string().min(1).nullable(),
+});
+export type NotificationJobPayload = z.infer<
+  typeof notificationJobPayloadSchema
+>;
 
 export const sourceAuthorityTierValues = [
   "TIER_1_OFFICIAL_INSTITUTION",

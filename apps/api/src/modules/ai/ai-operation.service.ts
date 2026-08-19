@@ -35,6 +35,14 @@ import {
   caseAnalysisInputSchema,
   caseAnalysisOutputSchema,
   type CaseAnalysisOutput,
+  type AnalyzeResponseInput,
+  analyzeResponseInputSchema,
+  analyzeResponseOutputSchema,
+  type AnalyzeResponseOutput,
+  type ReplanCaseInput,
+  replanCaseInputSchema,
+  replanCaseOutputSchema,
+  type ReplanCaseOutput,
 } from "./operation-schemas";
 import { GroqProvider } from "./groq.provider";
 import { aiOperationRegistry } from "./operation-registry";
@@ -45,6 +53,8 @@ import { extractProcedurePrompt } from "./prompts/extract-procedure.v1";
 import { verifyProceduralClaimPrompt } from "./prompts/verify-procedural-claim.v1";
 import { detectClaimConflictsPrompt } from "./prompts/detect-claim-conflicts.v1";
 import { analyzeCasePrompt } from "./prompts/analyze-case.v1";
+import { analyzeResponsePrompt } from "./prompts/analyze-response.v1";
+import { replanCasePrompt } from "./prompts/replan-case.v1";
 
 export interface AIOperationResult<T> {
   output: T;
@@ -266,6 +276,61 @@ export class AIOperationService {
             false,
           );
         }
+      },
+    );
+  }
+
+  async analyzeResponse(
+    input: AnalyzeResponseInput,
+  ): Promise<AIOperationResult<AnalyzeResponseOutput>> {
+    const parsed = analyzeResponseInputSchema.parse(input);
+    const definition = aiOperationRegistry["analyze-response"];
+    const allowedClaims = new Set(parsed.claims.map((claim) => claim.claimId));
+    return this.execute(
+      definition,
+      parsed,
+      [
+        parsed.caseId,
+        parsed.responseId,
+        ...parsed.claims.map((claim) => claim.claimId),
+      ],
+      analyzeResponsePrompt.buildMessages(JSON.stringify(parsed)),
+      analyzeResponseOutputSchema,
+      null,
+      (output) => {
+        assertRefsAreSubset(output.addressedClaimIds, allowedClaims);
+        assertRefsAreSubset(output.unaddressedClaimIds, allowedClaims);
+      },
+    );
+  }
+
+  async replanCase(
+    input: ReplanCaseInput,
+  ): Promise<AIOperationResult<ReplanCaseOutput>> {
+    const parsed = replanCaseInputSchema.parse(input);
+    const definition = aiOperationRegistry["replan-case"];
+    const allowedClaims = new Set(parsed.supportingClaimIds);
+    const allowedProceduralClaims = new Set(
+      parsed.supportingProceduralClaimIds,
+    );
+    return this.execute(
+      definition,
+      parsed,
+      [
+        parsed.caseId,
+        parsed.responseId,
+        ...parsed.supportingClaimIds,
+        ...parsed.supportingProceduralClaimIds,
+      ],
+      replanCasePrompt.buildMessages(JSON.stringify(parsed)),
+      replanCaseOutputSchema,
+      null,
+      (output) => {
+        assertRefsAreSubset(output.supportingClaimIds, allowedClaims);
+        assertRefsAreSubset(
+          output.supportingProceduralClaimIds,
+          allowedProceduralClaims,
+        );
       },
     );
   }

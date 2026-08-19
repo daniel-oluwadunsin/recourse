@@ -16,6 +16,10 @@ import {
   claimConflictOutputSchema,
   caseAnalysisInputSchema,
   caseAnalysisOutputSchema,
+  analyzeResponseInputSchema,
+  analyzeResponseOutputSchema,
+  replanCaseInputSchema,
+  replanCaseOutputSchema,
 } from "./operation-schemas";
 import { classifyCasePrompt } from "./prompts/classify-case.v1";
 import { extractDocumentClaimsPrompt } from "./prompts/extract-document-claims.v1";
@@ -24,6 +28,8 @@ import { extractProcedurePrompt } from "./prompts/extract-procedure.v1";
 import { verifyProceduralClaimPrompt } from "./prompts/verify-procedural-claim.v1";
 import { detectClaimConflictsPrompt } from "./prompts/detect-claim-conflicts.v1";
 import { analyzeCasePrompt } from "./prompts/analyze-case.v1";
+import { analyzeResponsePrompt } from "./prompts/analyze-response.v1";
+import { replanCasePrompt } from "./prompts/replan-case.v1";
 
 export interface AIOperationDefinition<
   TInput extends z.ZodType,
@@ -116,6 +122,28 @@ export const aiOperationRegistry = {
     inputSchema: caseAnalysisInputSchema,
     outputSchema: caseAnalysisOutputSchema,
     maxCompletionTokens: 3500,
+    buildPromptInput: (input) => JSON.stringify(input),
+  },
+  "analyze-response": {
+    name: "analyze-response",
+    modelPurpose: "REASONING",
+    promptVersion: analyzeResponsePrompt.promptVersion,
+    schemaVersion: analyzeResponsePrompt.schemaVersion,
+    schemaName: "analyze_response_v1",
+    inputSchema: analyzeResponseInputSchema,
+    outputSchema: analyzeResponseOutputSchema,
+    maxCompletionTokens: 3500,
+    buildPromptInput: (input) => JSON.stringify(input),
+  },
+  "replan-case": {
+    name: "replan-case",
+    modelPurpose: "REASONING",
+    promptVersion: replanCasePrompt.promptVersion,
+    schemaVersion: replanCasePrompt.schemaVersion,
+    schemaName: "replan_case_v1",
+    inputSchema: replanCaseInputSchema,
+    outputSchema: replanCaseOutputSchema,
+    maxCompletionTokens: 2500,
     buildPromptInput: (input) => JSON.stringify(input),
   },
 } satisfies Record<string, AIOperationDefinition<z.ZodType, z.ZodType>>;

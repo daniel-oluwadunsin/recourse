@@ -1,0 +1,29 @@
+export const requestedOutcomes = [
+  "REVIEW_DECISION",
+  "REINSTATE_ACCESS",
+  "REMOVE_RESTRICTION",
+  "RELEASE_FUNDS",
+  "RESTORE_CONTENT",
+  "CLARIFY_REASON",
+  "OTHER",
+] as const;
+export const controlledActions = [
+  "COLLECT_EVIDENCE",
+  "REQUEST_CLARIFICATION",
+  "WAIT_FOR_RESPONSE",
+  "FOLLOW_UP",
+  "GENERATE_APPEAL",
+  "SUBMIT_APPEAL",
+  "SUBMIT_SECOND_REVIEW",
+  "USE_EXTERNAL_REMEDY",
+  "ESCALATE_TO_HUMAN",
+  "CLOSE_RESOLVED",
+  "CLOSE_EXHAUSTED",
+] as const;
+export const capabilities = [
+  "AUTO_API",
+  "EMAIL",
+  "ASSISTED_PORTAL",
+  "MANUAL",
+  "UNSUPPORTED",
+] as const;

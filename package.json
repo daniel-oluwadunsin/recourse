@@ -17,7 +17,10 @@
     "groq:check": "pnpm --filter @recourse/config build && node --env-file=.env --import tsx scripts/groq-live-check.ts",
     "embedding:check": "pnpm --filter @recourse/config build && node --env-file=.env --import tsx scripts/embedding-live-check.ts",
     "tavily:check": "pnpm --filter @recourse/config build && node --env-file=.env --import tsx scripts/tavily-live-check.ts",
+    "gmail:check": "pnpm --filter @recourse/config build && node --env-file=.env --import tsx scripts/gmail-live-check.ts",
     "atlas:indexes": "pnpm --filter @recourse/config build && node --env-file=.env --import tsx scripts/atlas-vector-indexes.ts",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
     "web:dev": "pnpm --filter web dev",
     "api:dev": "pnpm --filter api... build && pnpm --filter api start:dev",
     "worker:dev": "pnpm --filter worker... build && pnpm --filter worker start:dev",
@@ -26,6 +29,7 @@
     "worker:build": "pnpm --filter worker build"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "prettier": "3.9.6",
     "tsx": "4.23.12",
     "turbo": "2.10.10",

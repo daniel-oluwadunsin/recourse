@@ -2,10 +2,12 @@ import { z } from "zod";
 
 import {
   claimEvidenceStatusSchema,
+  controlledActionTypeSchema,
   decisionTypeSchema,
   proceduralClaimTypeSchema,
   proceduralClaimVerificationStatusSchema,
   relationshipTypeSchema,
+  responseOutcomeSchema,
   sourceAuthorityTierSchema,
 } from "@recourse/contracts";
 
@@ -275,3 +277,67 @@ export const caseAnalysisOutputSchema = z.object({
   needsHumanReview: z.boolean(),
 });
 export type CaseAnalysisOutput = z.infer<typeof caseAnalysisOutputSchema>;
+
+export const analyzeResponseInputSchema = z.object({
+  caseId: z.string().min(1),
+  responseId: z.string().min(1),
+  subject: boundedText.nullable(),
+  sender: z.string().max(320),
+  responseText: boundedText,
+  claims: z
+    .array(
+      z.object({
+        claimId: z.string().min(1),
+        text: boundedText,
+        status: claimEvidenceStatusSchema,
+      }),
+    )
+    .max(100),
+  verifiedProceduralClaimIds: z.array(z.string().min(1)).max(100),
+});
+export type AnalyzeResponseInput = z.infer<typeof analyzeResponseInputSchema>;
+
+export const responseNewIssueSchema = z.object({
+  text: boundedText,
+  evidenceRequested: z.boolean(),
+});
+
+export const analyzeResponseOutputSchema = z.object({
+  outcome: responseOutcomeSchema,
+  outcomeConfidence: z.number().min(0).max(1),
+  statedReason: boundedText.nullable(),
+  addressedClaimIds: z.array(z.string().min(1)).max(100),
+  unaddressedClaimIds: z.array(z.string().min(1)).max(100),
+  newIssues: z.array(responseNewIssueSchema).max(50),
+  requestedEvidence: z.array(boundedText).max(50),
+  mentionedDeadlines: z.array(boundedText).max(20),
+  needsHumanReview: z.boolean(),
+});
+export type AnalyzeResponseOutput = z.infer<typeof analyzeResponseOutputSchema>;
+
+export const replanCaseInputSchema = z.object({
+  caseId: z.string().min(1),
+  responseId: z.string().min(1),
+  outcome: responseOutcomeSchema,
+  outcomeConfidence: z.number().min(0).max(1),
+  statedReason: boundedText.nullable(),
+  requestedEvidence: z.array(boundedText).max(50),
+  newIssues: z.array(responseNewIssueSchema).max(50),
+  openCriticalGapCount: z.number().int().nonnegative(),
+  unresolvedContradictionCount: z.number().int().nonnegative(),
+  procedureVerified: z.boolean(),
+  procedureCapabilities: z.array(z.string().max(50)).max(10),
+  supportingClaimIds: z.array(z.string().min(1)).max(100),
+  supportingProceduralClaimIds: z.array(z.string().min(1)).max(100),
+});
+export type ReplanCaseInput = z.infer<typeof replanCaseInputSchema>;
+
+export const replanCaseOutputSchema = z.object({
+  nextAction: controlledActionTypeSchema,
+  rationale: boundedText,
+  supportingClaimIds: z.array(z.string().min(1)).max(100),
+  supportingProceduralClaimIds: z.array(z.string().min(1)).max(100),
+  confidence: z.number().min(0).max(1),
+  needsHumanReview: z.boolean(),
+});
+export type ReplanCaseOutput = z.infer<typeof replanCaseOutputSchema>;

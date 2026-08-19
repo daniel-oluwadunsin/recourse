@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 
 import { AuthorizationModule } from "../../common/authorization/authorization.module";
@@ -27,7 +27,7 @@ import {
   imports: [
     AuthorizationModule,
     AuthModule,
-    CasesModule,
+    forwardRef(() => CasesModule),
     MongooseModule.forFeature([
       { name: Case.name, schema: CaseSchema },
       { name: Evidence.name, schema: EvidenceSchema },

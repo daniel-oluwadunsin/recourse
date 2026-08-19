@@ -1,10 +1,11 @@
-import { forwardRef, Inject, Injectable } from "@nestjs/common";
+import { forwardRef, Inject, Injectable, Optional } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { UnrecoverableError } from "bullmq";
 import { type Model, Types } from "mongoose";
 
 import {
   type CaseEventJobPayload,
+  type AIOperationJobPayload,
   type EvidenceProcessingJobPayload,
   type ProcedureRetrievalJobPayload,
 } from "@recourse/contracts";
@@ -23,6 +24,8 @@ import { Decision } from "../cases/schemas/decision.schema";
 import { Evidence } from "../evidence/schemas/evidence.schema";
 import { hashInput } from "../ai/ai-operation.service";
 import { type ClassifyCaseInput } from "../ai/operation-schemas";
+import { CaseResponse } from "../email/schemas/case-response.schema";
+import { DeadlineService } from "../email/deadline.service";
 
 @Injectable()
 export class CaseOrchestratorService {
@@ -39,6 +42,12 @@ export class CaseOrchestratorService {
     private readonly activityPubSub: ActivityPubSubService,
     private readonly queueProducer: QueueProducerService,
     private readonly workflowDispatch: WorkflowDispatchService,
+    @Optional()
+    @InjectModel(CaseResponse.name)
+    private readonly responseModel?: Model<CaseResponse>,
+    @Optional()
+    @Inject(forwardRef(() => DeadlineService))
+    private readonly deadlineService?: DeadlineService,
   ) {}
 
   async handleCaseEvent(payload: CaseEventJobPayload): Promise<{
@@ -214,6 +223,145 @@ export class CaseOrchestratorService {
       }
     }
 
+    if (event.type === "RESPONSE_RECEIVED") {
+      const responseId = readPayloadString(event, "responseId");
+      if (
+        this.responseModel &&
+        responseId &&
+        Types.ObjectId.isValid(responseId)
+      ) {
+        const activeCase = await this.caseModel
+          .findOne({ _id: event.caseId, deletedAt: null })
+          .exec();
+        const response = await this.responseModel
+          .findOne({
+            _id: new Types.ObjectId(responseId),
+            associationStatus: "ASSOCIATED",
+            caseId: event.caseId,
+          })
+          .exec();
+        if (activeCase && response) {
+          const responseDocument = response as CaseResponse & {
+            _id: Types.ObjectId;
+          };
+          if (activeCase.status === "AWAITING_RESPONSE") {
+            await this.stateMachine.transition(
+              activeCase._id.toString(),
+              "RESPONSE_RECEIVED",
+              {
+                actorId: null,
+                actorType: "SYSTEM",
+                correlationId: event.correlationId ?? undefined,
+              },
+              {
+                eventType: "CASE_STATUS_CHANGED",
+                expectedCurrent: ["AWAITING_RESPONSE"],
+                expectedRevision: activeCase.revision,
+                idempotencyKey: `response-received-status-${responseDocument._id.toString()}`,
+                payload: {
+                  responseId: responseDocument._id.toString(),
+                  to: "RESPONSE_RECEIVED",
+                },
+              },
+            );
+          }
+          if (this.deadlineService) {
+            await this.deadlineService.recalculate(
+              activeCase._id.toString(),
+              "RESPONSE_DATE",
+              response.receivedAt,
+              event.correlationId,
+            );
+          }
+          await this.scheduleResponseOperation(
+            response,
+            "analyze-response",
+            event.correlationId,
+            scheduled,
+          );
+        }
+      }
+    }
+
+    if (event.type === "RESPONSE_ANALYZED") {
+      const responseId = readPayloadString(event, "responseId");
+      if (
+        this.responseModel &&
+        responseId &&
+        Types.ObjectId.isValid(responseId)
+      ) {
+        const activeCase = await this.caseModel
+          .findOne({ _id: event.caseId, deletedAt: null })
+          .exec();
+        const response = await this.responseModel
+          .findOne({
+            _id: new Types.ObjectId(responseId),
+            caseId: event.caseId,
+          })
+          .exec();
+        if (activeCase && response) {
+          const responseDocument = response as CaseResponse & {
+            _id: Types.ObjectId;
+          };
+          if (activeCase.status === "RESPONSE_RECEIVED") {
+            await this.stateMachine.transition(
+              activeCase._id.toString(),
+              "REPLANNING",
+              {
+                actorId: null,
+                actorType: "SYSTEM",
+                correlationId: event.correlationId ?? undefined,
+              },
+              {
+                eventType: "CASE_REPLANNING",
+                expectedCurrent: ["RESPONSE_RECEIVED"],
+                expectedRevision: activeCase.revision,
+                idempotencyKey: `response-replanning-${responseDocument._id.toString()}`,
+                payload: { responseId: responseDocument._id.toString() },
+              },
+            );
+            await this.scheduleResponseOperation(
+              response,
+              "replan-case",
+              event.correlationId,
+              scheduled,
+            );
+          } else if (activeCase.status === "REPLANNING") {
+            await this.scheduleResponseOperation(
+              response,
+              "replan-case",
+              event.correlationId,
+              scheduled,
+            );
+          }
+        }
+      }
+    }
+
+    if (event.type === "PROCEDURE_RESOLVED" && this.deadlineService) {
+      const activeCase = await this.caseModel
+        .findOne({ _id: event.caseId, deletedAt: null })
+        .exec();
+      if (activeCase) {
+        if (activeCase.notificationDate) {
+          await this.deadlineService.recalculate(
+            activeCase._id.toString(),
+            "NOTIFICATION_DATE",
+            activeCase.notificationDate,
+            event.correlationId,
+          );
+        }
+        if (activeCase.decisionDate) {
+          await this.deadlineService.recalculate(
+            activeCase._id.toString(),
+            "DECISION_DATE",
+            activeCase.decisionDate,
+            event.correlationId,
+          );
+        }
+      }
+    }
+
     await this.activityPubSub.publish({
       caseId: event.caseId.toString(),
       sequence: event.sequence,
@@ -259,6 +407,37 @@ export class CaseOrchestratorService {
       workflowVersion: WORKFLOW_VERSION,
     });
     scheduled.push(`ai-operations:classify-case:${activeCase._id.toString()}`);
+  }
+
+  private async scheduleResponseOperation(
+    response: CaseResponse,
+    operation: AIOperationJobPayload["operation"],
+    correlationId: string | null,
+    scheduled: string[],
+  ): Promise<void> {
+    if (operation !== "analyze-response" && operation !== "replan-case") return;
+    const responseDocument = response as CaseResponse & { _id: Types.ObjectId };
+    const caseId = response.caseId?.toString();
+    if (!caseId) return;
+    const inputHash = hashInput({
+      caseId,
+      responseId: responseDocument._id.toString(),
+      responseRevision: response.revision,
+    });
+    await this.queueProducer.enqueueAIOperation({
+      caseId,
+      correlationId,
+      evidenceId: null,
+      expectedRevision: response.revision,
+      idempotencyKey: `${operation}-${responseDocument._id.toString()}-${response.revision}-${inputHash}`,
+      inputHash,
+      operation,
+      responseId: responseDocument._id.toString(),
+      workflowVersion: WORKFLOW_VERSION,
+    });
+    scheduled.push(
+      `ai-operations:${operation}:${responseDocument._id.toString()}`,
+    );
   }
 }
 

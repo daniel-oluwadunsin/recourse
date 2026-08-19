@@ -23,6 +23,8 @@ describe("bounded AI operation catalog", () => {
       "verify-procedural-claim",
       "detect-claim-conflicts",
       "analyze-case",
+      "analyze-response",
+      "replan-case",
     ]);
     expect(aiOperationRegistry["classify-case"].modelPurpose).toBe("FAST");
     expect(aiOperationRegistry["extract-document-claims"].promptVersion).toBe(

@@ -48,6 +48,16 @@ export interface StorageProvider {
 
   deleteObject(storageKey: string): Promise<void>;
 
+  /**
+   * Server-side upload is intentionally limited to bounded inbound artifacts
+   * such as parsed email bodies. User uploads still use direct signed upload.
+   */
+  uploadObject?(input: {
+    storageKey: string;
+    bytes: Buffer;
+    contentType: string;
+  }): Promise<StoredObjectMetadata>;
+
   healthCheck(): Promise<StorageHealth>;
 }
 

@@ -18,6 +18,19 @@ import { GroqProvider } from "./groq.provider";
 import { AIModelRouterService } from "./model-router.service";
 import { AIRun, AIRunSchema } from "./schemas/ai-run.schema";
 import { IntelligenceModule } from "../intelligence/intelligence.module";
+import { Claim, ClaimSchema } from "../intelligence/schemas/claim.schema";
+import {
+  ProceduralClaim,
+  ProceduralClaimSchema,
+} from "../procedure/schemas/procedural-claim.schema";
+import {
+  ProcedureVersion,
+  ProcedureVersionSchema,
+} from "../procedure/schemas/procedure-version.schema";
+import {
+  CaseResponse,
+  CaseResponseSchema,
+} from "../email/schemas/case-response.schema";
 
 @Module({
   exports: [AIJobService, AIOperationService, AIRunService, GroqProvider],
@@ -31,6 +44,10 @@ import { IntelligenceModule } from "../intelligence/intelligence.module";
       { name: Decision.name, schema: DecisionSchema },
       { name: Evidence.name, schema: EvidenceSchema },
       { name: EvidenceBlock.name, schema: EvidenceBlockSchema },
+      { name: CaseResponse.name, schema: CaseResponseSchema },
+      { name: Claim.name, schema: ClaimSchema },
+      { name: ProceduralClaim.name, schema: ProceduralClaimSchema },
+      { name: ProcedureVersion.name, schema: ProcedureVersionSchema },
     ]),
     StorageModule,
   ],

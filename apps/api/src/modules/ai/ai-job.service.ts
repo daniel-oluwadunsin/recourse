@@ -18,6 +18,7 @@ import {
   type StorageProvider,
 } from "../storage/storage.types";
 import { CaseStateMachineService } from "../cases/case-state-machine.service";
+import { CaseEventService } from "../cases/case-events.service";
 import { Case } from "../cases/schemas/case.schema";
 import { Decision } from "../cases/schemas/decision.schema";
 import { Evidence } from "../evidence/schemas/evidence.schema";
@@ -28,6 +29,10 @@ import {
   type ExtractDocumentClaimsInput,
 } from "./operation-schemas";
 import { CaseIntelligenceService } from "../intelligence/case-intelligence.service";
+import { Claim } from "../intelligence/schemas/claim.schema";
+import { ProceduralClaim } from "../procedure/schemas/procedural-claim.schema";
+import { ProcedureVersion } from "../procedure/schemas/procedure-version.schema";
+import { CaseResponse } from "../email/schemas/case-response.schema";
 
 export class AIJobDomainError extends Error {
   constructor(
@@ -47,9 +52,17 @@ export class AIJobService {
     @InjectModel(Evidence.name) private readonly evidenceModel: Model<Evidence>,
     @InjectModel(EvidenceBlock.name)
     private readonly evidenceBlockModel: Model<EvidenceBlock>,
+    @InjectModel(CaseResponse.name)
+    private readonly responseModel: Model<CaseResponse>,
+    @InjectModel(Claim.name) private readonly claimModel: Model<Claim>,
+    @InjectModel(ProceduralClaim.name)
+    private readonly proceduralClaimModel: Model<ProceduralClaim>,
+    @InjectModel(ProcedureVersion.name)
+    private readonly procedureVersionModel: Model<ProcedureVersion>,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly operationService: AIOperationService,
     private readonly stateMachine: CaseStateMachineService,
+    private readonly events: CaseEventService,
     @Inject(forwardRef(() => CaseIntelligenceService))
     private readonly intelligence: CaseIntelligenceService,
   ) {}
@@ -101,7 +114,279 @@ export class AIJobService {
           "UNSUPPORTED_AI_QUEUE_OPERATION",
           "This AI operation is invoked only by the intelligence boundary.",
         );
+      case "analyze-response":
+        return this.analyzeResponse(parsed);
+      case "replan-case":
+        return this.replanCase(parsed);
     }
+  }
+
+  private async analyzeResponse(
+    payload: AIOperationJobPayload,
+  ): Promise<unknown> {
+    if (
+      !payload.caseId ||
+      !payload.responseId ||
+      payload.expectedRevision === null
+    ) {
+      throw new AIJobDomainError(
+        "INVALID_RESPONSE_ANALYSIS_PAYLOAD",
+        "Response analysis requires a case, response, and revision.",
+      );
+    }
+    const caseDocument = await this.caseModel
+      .findOne({
+        _id: new Types.ObjectId(payload.caseId),
+        deletedAt: null,
+      })
+      .exec();
+    const response = await this.responseModel
+      .findOne({
+        _id: new Types.ObjectId(payload.responseId),
+        caseId: new Types.ObjectId(payload.caseId),
+        associationStatus: "ASSOCIATED",
+      })
+      .exec();
+    if (!caseDocument || !response) {
+      throw new AIJobDomainError(
+        "RESPONSE_NOT_FOUND",
+        "Response is unavailable.",
+      );
+    }
+    const responseDocument = response as CaseResponse & { _id: Types.ObjectId };
+    if (response.processingStatus === "ANALYZED") {
+      return {
+        responseId: responseDocument._id.toString(),
+        status: "already-analyzed",
+      };
+    }
+    if (response.revision !== payload.expectedRevision) {
+      throw new AIJobDomainError(
+        "STALE_RESPONSE_REVISION",
+        "Response revision is stale.",
+      );
+    }
+    const claims = await this.claimModel
+      .find({ caseId: caseDocument._id })
+      .limit(100)
+      .exec();
+    const version = caseDocument.activeProcedureVersionId
+      ? await this.procedureVersionModel
+          .findById(caseDocument.activeProcedureVersionId)
+          .exec()
+      : null;
+    const verifiedProceduralClaimIds = version
+      ? (
+          await this.proceduralClaimModel
+            .find({
+              _id: { $in: version.proceduralClaimIds },
+              verificationStatus: "SUPPORTED",
+            })
+            .select({ _id: 1 })
+            .exec()
+        ).map((claim) => claim._id.toString())
+      : [];
+    const input = {
+      caseId: payload.caseId,
+      claims: claims.map((claim) => ({
+        claimId: (claim as Claim & { _id: Types.ObjectId })._id.toString(),
+        status: claim.status,
+        text: claim.text,
+      })),
+      responseId: responseDocument._id.toString(),
+      responseText: response.bodyText.slice(0, 20000),
+      sender: response.fromAddress,
+      subject: response.subject,
+      verifiedProceduralClaimIds,
+    };
+    assertInputHash(payload, {
+      caseId: payload.caseId,
+      responseId: responseDocument._id.toString(),
+      responseRevision: response.revision,
+    });
+    const result = await this.operationService.analyzeResponse(input);
+    const analysisUpdate = await this.responseModel
+      .updateOne(
+        {
+          _id: responseDocument._id,
+          revision: response.revision,
+          processingStatus: "RECEIVED",
+        },
+        {
+          $inc: { revision: 1 },
+          $set: {
+            addressedClaimIds: result.output.addressedClaimIds,
+            analysisRunId: result.run._id,
+            analyzedAt: new Date(),
+            mentionedDeadlines: result.output.mentionedDeadlines,
+            newIssues: result.output.newIssues,
+            outcome: result.output.outcome,
+            outcomeConfidence: result.output.outcomeConfidence,
+            processingStatus: "ANALYZED",
+            requestedEvidence: result.output.requestedEvidence,
+            statedReason: result.output.statedReason,
+            unaddressedClaimIds: result.output.unaddressedClaimIds,
+          },
+        },
+      )
+      .exec();
+    if (analysisUpdate.modifiedCount !== 1) {
+      return {
+        responseId: responseDocument._id.toString(),
+        status: "already-analyzed",
+      };
+    }
+    await this.events.append({
+      actor: {
+        actorId: null,
+        actorType: "SYSTEM",
+        correlationId: payload.correlationId ?? undefined,
+      },
+      caseId: payload.caseId,
+      idempotencyKey: `response-analyzed-${responseDocument._id.toString()}-${result.run._id.toString()}`,
+      payload: {
+        outcome: result.output.outcome,
+        responseId: responseDocument._id.toString(),
+        needsHumanReview: result.output.needsHumanReview,
+      },
+      type: "RESPONSE_ANALYZED",
+    });
+    return {
+      aiRunId: result.run._id.toString(),
+      responseId: responseDocument._id.toString(),
+      status: "analyzed",
+    };
+  }
+
+  private async replanCase(payload: AIOperationJobPayload): Promise<unknown> {
+    if (
+      !payload.caseId ||
+      !payload.responseId ||
+      payload.expectedRevision === null
+    ) {
+      throw new AIJobDomainError(
+        "INVALID_REPLAN_PAYLOAD",
+        "Replanning requires a case, response, and revision.",
+      );
+    }
+    const caseDocument = await this.caseModel
+      .findOne({
+        _id: new Types.ObjectId(payload.caseId),
+        deletedAt: null,
+      })
+      .exec();
+    const response = await this.responseModel
+      .findOne({
+        _id: new Types.ObjectId(payload.responseId),
+        caseId: new Types.ObjectId(payload.caseId),
+        processingStatus: "ANALYZED",
+      })
+      .exec();
+    if (!caseDocument || !response)
+      throw new AIJobDomainError(
+        "REPLAN_CONTEXT_MISSING",
+        "Replan context is unavailable.",
+      );
+    const responseDocument = response as CaseResponse & { _id: Types.ObjectId };
+    if (response.revision !== payload.expectedRevision)
+      throw new AIJobDomainError(
+        "STALE_RESPONSE_REVISION",
+        "Response revision is stale.",
+      );
+    const claims = await this.claimModel
+      .find({ caseId: caseDocument._id })
+      .limit(100)
+      .exec();
+    const version = caseDocument.activeProcedureVersionId
+      ? await this.procedureVersionModel
+          .findById(caseDocument.activeProcedureVersionId)
+          .exec()
+      : null;
+    const proceduralClaims = version
+      ? await this.proceduralClaimModel
+          .find({
+            _id: { $in: version.proceduralClaimIds },
+            verificationStatus: "SUPPORTED",
+          })
+          .select({ _id: 1 })
+          .exec()
+      : [];
+    const input = {
+      caseId: payload.caseId,
+      newIssues: response.newIssues.map((issue) => ({
+        evidenceRequested: issue["evidenceRequested"] === true,
+        text: typeof issue["text"] === "string" ? issue["text"] : "",
+      })),
+      openCriticalGapCount: caseDocument.openCriticalGapCount,
+      outcome: response.outcome ?? "UNKNOWN",
+      outcomeConfidence: response.outcomeConfidence ?? 0,
+      procedureCapabilities: version ? [version.submissionCapability] : [],
+      procedureVerified: Boolean(version && version.confidence >= 0.65),
+      requestedEvidence: response.requestedEvidence,
+      responseId: responseDocument._id.toString(),
+      statedReason: response.statedReason,
+      supportingClaimIds: claims.map((claim) =>
+        (claim as Claim & { _id: Types.ObjectId })._id.toString(),
+      ),
+      supportingProceduralClaimIds: proceduralClaims.map((claim) =>
+        (claim as ProceduralClaim & { _id: Types.ObjectId })._id.toString(),
+      ),
+      unresolvedContradictionCount: caseDocument.contradictionCount,
+    };
+    assertInputHash(payload, {
+      caseId: payload.caseId,
+      responseId: responseDocument._id.toString(),
+      responseRevision: response.revision,
+    });
+    const result = await this.operationService.replanCase(input);
+    const replanUpdate = await this.responseModel
+      .updateOne(
+        { _id: responseDocument._id, revision: response.revision },
+        {
+          $inc: { revision: 1 },
+          $set: {
+            replanNextAction: result.output.nextAction,
+            replanRationale: result.output.rationale,
+            replanRunId: result.run._id,
+          },
+        },
+      )
+      .exec();
+    if (replanUpdate.modifiedCount !== 1) {
+      return {
+        responseId: responseDocument._id.toString(),
+        status: "already-replanned",
+      };
+    }
+    const nextStatus = nextStatusForReplan(
+      response,
+      result.output.nextAction,
+      result.output.needsHumanReview,
+    );
+    await this.stateMachine.transition(
+      payload.caseId,
+      nextStatus,
+      {
+        actorId: null,
+        actorType: "SYSTEM",
+        correlationId: payload.correlationId ?? undefined,
+      },
+      {
+        expectedCurrent: ["REPLANNING"],
+        expectedRevision: caseDocument.revision,
+        idempotencyKey: `replan-transition-${responseDocument._id.toString()}-${result.run._id.toString()}`,
+        payload: {
+          nextAction: result.output.nextAction,
+          rationale: result.output.rationale,
+          responseId: responseDocument._id.toString(),
+        },
+      },
+    );
+    return {
+      aiRunId: result.run._id.toString(),
+      nextAction: result.output.nextAction,
+      status: nextStatus,
+    };
   }
 
   private async classify(payload: AIOperationJobPayload): Promise<unknown> {
@@ -291,4 +576,35 @@ function assertInputHash(payload: AIOperationJobPayload, input: unknown): void {
       "AI input hash no longer matches the job.",
     );
   }
+}
+
+export function nextStatusForReplan(
+  response: CaseResponse,
+  action: string,
+  needsHumanReview: boolean,
+):
+  | "EVIDENCE_COLLECTION"
+  | "READY_TO_APPEAL"
+  | "RESOLVED"
+  | "EXHAUSTED"
+  | "NEEDS_HUMAN" {
+  if (needsHumanReview || !response.outcome) return "NEEDS_HUMAN";
+  if (
+    action === "CLOSE_RESOLVED" &&
+    response.outcome === "APPROVED" &&
+    typeof response.outcomeConfidence === "number" &&
+    response.outcomeConfidence >= 0.9 &&
+    response.newIssues.length === 0 &&
+    response.requestedEvidence.length === 0
+  ) {
+    return "RESOLVED";
+  }
+  if (action === "CLOSE_EXHAUSTED" && response.outcome === "REJECTED") {
+    return "EXHAUSTED";
+  }
+  if (action === "COLLECT_EVIDENCE") return "EVIDENCE_COLLECTION";
+  if (action === "GENERATE_APPEAL" || action === "SUBMIT_SECOND_REVIEW") {
+    return "READY_TO_APPEAL";
+  }
+  return "NEEDS_HUMAN";
 }

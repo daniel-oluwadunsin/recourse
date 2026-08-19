@@ -11,9 +11,17 @@
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@hookform/resolvers": "5.9.1",
+    "@tanstack/react-query": "5.101.4",
+    "@xyflow/react": "12.11.3",
+    "framer-motion": "13.1.0",
+    "iconsax-reactjs": "0.0.8",
     "next": "16.3.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "react-hook-form": "7.85.0",
+    "zod": "4.4.3",
+    "zustand": "5.0.15"
   },
   "devDependencies": {
     "@recourse/eslint-config": "workspace:*",

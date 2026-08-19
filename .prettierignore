@@ -8,3 +8,6 @@ docs/
 *.woff
 *.ico
 *.svg
+.playwright-mcp/
+playwright-report/
+test-results/

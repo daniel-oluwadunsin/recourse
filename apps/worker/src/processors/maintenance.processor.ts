@@ -10,6 +10,7 @@ import {
 import { type EnvironmentConfig } from "@recourse/config";
 
 import { WorkflowDispatchService } from "api/queues";
+import { DeadlineService, EmailInboundService } from "api/email";
 import { QueueNames } from "api/queue-constants";
 import { NonRetryableQueueError } from "api/queues";
 
@@ -22,6 +23,8 @@ export class MaintenanceProcessor
   constructor(
     private readonly config: ConfigService<EnvironmentConfig>,
     private readonly workflowDispatch: WorkflowDispatchService,
+    private readonly inbound: EmailInboundService,
+    private readonly deadlines: DeadlineService,
   ) {
     super();
   }
@@ -34,9 +37,19 @@ export class MaintenanceProcessor
         "INVALID_JOB_PAYLOAD",
       );
     }
-    return {
-      publishedDispatches: await this.workflowDispatch.publishPending(),
-    };
+    const [publishedDispatches, expiredDeadlines] = await Promise.all([
+      this.workflowDispatch.publishPending(),
+      this.deadlines.expireDue(),
+    ]);
+    let inboundMessages = 0;
+    try {
+      inboundMessages = await this.inbound.pollGmail();
+    } catch {
+      // A mailbox outage is observable through the failed maintenance job;
+      // it must not cause a false response or state transition.
+      throw new Error("Gmail inbound polling failed.");
+    }
+    return { expiredDeadlines, inboundMessages, publishedDispatches };
   }
 
   onApplicationBootstrap(): void {

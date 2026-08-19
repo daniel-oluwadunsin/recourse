@@ -104,6 +104,26 @@ import {
   CaseAction,
   CaseActionSchema,
 } from "../modules/appeals/schemas/case-action.schema";
+import {
+  CaseEmailToken,
+  CaseEmailTokenSchema,
+} from "../modules/email/schemas/case-email-token.schema";
+import {
+  CaseResponse,
+  CaseResponseSchema,
+} from "../modules/email/schemas/case-response.schema";
+import {
+  InboundEmail,
+  InboundEmailSchema,
+} from "../modules/email/schemas/inbound-email.schema";
+import {
+  Notification,
+  NotificationSchema,
+} from "../modules/email/schemas/notification.schema";
+import {
+  OutboundEmail,
+  OutboundEmailSchema,
+} from "../modules/email/schemas/outbound-email.schema";
 
 const environment = parseEnvironment();
 
@@ -243,6 +263,31 @@ async function createAndVerifyIndexes(): Promise<void> {
         collection: "case_actions",
         name: CaseAction.name,
         schema: CaseActionSchema,
+      },
+      {
+        collection: "case_email_tokens",
+        name: CaseEmailToken.name,
+        schema: CaseEmailTokenSchema,
+      },
+      {
+        collection: "case_responses",
+        name: CaseResponse.name,
+        schema: CaseResponseSchema,
+      },
+      {
+        collection: "inbound_emails",
+        name: InboundEmail.name,
+        schema: InboundEmailSchema,
+      },
+      {
+        collection: "notifications",
+        name: Notification.name,
+        schema: NotificationSchema,
+      },
+      {
+        collection: "outbound_emails",
+        name: OutboundEmail.name,
+        schema: OutboundEmailSchema,
       },
     ];
 

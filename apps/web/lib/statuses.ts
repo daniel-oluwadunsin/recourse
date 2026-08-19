@@ -1,0 +1,38 @@
+export const caseStatuses = [
+  "INTAKE",
+  "CLASSIFYING",
+  "PROCEDURE_RESOLUTION",
+  "EVIDENCE_COLLECTION",
+  "CASE_ANALYSIS",
+  "READY_TO_APPEAL",
+  "AWAITING_USER_APPROVAL",
+  "SUBMITTED",
+  "AWAITING_RESPONSE",
+  "RESPONSE_RECEIVED",
+  "REPLANNING",
+  "RESOLVED",
+  "EXHAUSTED",
+  "NEEDS_HUMAN",
+] as const;
+export const relationshipTypes = [
+  "SELLER",
+  "DRIVER",
+  "CREATOR",
+  "MERCHANT",
+  "CONSUMER",
+  "OTHER",
+  "UNKNOWN",
+] as const;
+export const decisionTypes = [
+  "SUSPENSION",
+  "RESTRICTION",
+  "DEACTIVATION",
+  "DEMONETIZATION",
+  "ACCOUNT_TERMINATION",
+  "PAYMENT_HOLD",
+  "VERIFICATION_FAILURE",
+  "CONTENT_REMOVAL",
+  "LISTING_REMOVAL",
+  "OTHER",
+  "UNKNOWN",
+] as const;

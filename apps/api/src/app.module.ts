@@ -21,6 +21,7 @@ import { AIModule } from "./modules/ai/ai.module";
 import { ProcedureModule } from "./modules/procedure/procedure.module";
 import { IntelligenceModule } from "./modules/intelligence/intelligence.module";
 import { AppealsModule } from "./modules/appeals/appeals.module";
+import { EmailModule } from "./modules/email/email.module";
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AppealsModule } from "./modules/appeals/appeals.module";
     ProcedureModule,
     IntelligenceModule,
     AppealsModule,
+    EmailModule,
     AdminModule,
     HealthModule,
   ],

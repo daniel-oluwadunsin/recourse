@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 
 import {
   type ActionStatus,
@@ -10,6 +10,7 @@ import {
 } from "@recourse/contracts";
 
 import { type ActionRecommendation } from "./appeal.types";
+import { EmailService } from "../email/email.service";
 
 export interface ActionPolicyInput {
   caseStatus: CaseStatus;
@@ -40,6 +41,8 @@ export interface ActionPolicyDecision {
 
 @Injectable()
 export class ActionPolicyEngine {
+  constructor(@Optional() private readonly email?: EmailService) {}
+
   evaluate(input: ActionPolicyInput): ActionPolicyDecision {
     const gates: string[] = [];
     const reasons: string[] = [];
@@ -96,9 +99,21 @@ export class ActionPolicyEngine {
         }
         break;
       case "EMAIL":
-        available = false;
-        reasons.push("No real transactional email provider is configured.");
-        gates.push("EMAIL_PROVIDER_UNAVAILABLE");
+        if (
+          !this.email?.isConfigured() ||
+          !input.officialDestination?.startsWith("mailto:")
+        ) {
+          available = false;
+          reasons.push(
+            "A real Gmail provider and a verified mailto destination are required.",
+          );
+          gates.push("EMAIL_PROVIDER_UNAVAILABLE");
+        } else {
+          canExecute = true;
+          reasons.push(
+            "The approved appeal can be sent through the configured Gmail SMTP provider; provider acceptance is verified, not institution resolution.",
+          );
+        }
         break;
       case "AUTO_API":
         available = false;

@@ -25,6 +25,12 @@ export class Deadline {
   @Prop({ default: null, ref: "ProceduralClaim", type: SchemaTypes.ObjectId })
   sourceProceduralClaimId!: Types.ObjectId | null;
 
+  @Prop({ default: null, ref: "ProcedureVersion", type: SchemaTypes.ObjectId })
+  sourceProcedureVersionId!: Types.ObjectId | null;
+
+  @Prop({ default: null, ref: "SourceSnapshot", type: SchemaTypes.ObjectId })
+  sourceSnapshotId!: Types.ObjectId | null;
+
   @Prop({ enum: [...deadlineTriggerTypeValues], required: true, type: String })
   triggerType!: DeadlineTriggerType;
 
@@ -67,4 +73,8 @@ DeadlineSchema.index({ caseId: 1, dueAt: 1 }, { name: "deadlines_case_due" });
 DeadlineSchema.index(
   { caseId: 1, status: 1, dueAt: 1 },
   { name: "deadlines_case_status_due" },
+);
+DeadlineSchema.index(
+  { caseId: 1, sourceProcedureVersionId: 1, type: 1 },
+  { name: "deadlines_case_source_version_type" },
 );

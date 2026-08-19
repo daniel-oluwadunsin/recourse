@@ -317,6 +317,28 @@ const baseEnvironmentSchema = z.object({
   AUTH_RATE_LIMIT_LIMIT: z.coerce.number().int().min(1).default(10),
   TRUST_PROXY: optionalBoolean.default(false),
 
+  EMAIL_PROVIDER: z.enum(["none", "gmail"]).default("none"),
+  GMAIL_EMAIL: optionalString,
+  GMAIL_APP_PASSWORD: optionalString,
+  GMAIL_IMAP_HOST: z.string().min(1).default("imap.gmail.com"),
+  GMAIL_IMAP_PORT: z.coerce.number().int().min(1).max(65535).default(993),
+  GMAIL_IMAP_SECURE: optionalBoolean.default(true),
+  GMAIL_IMAP_MAILBOX: z.string().min(1).default("INBOX"),
+  EMAIL_FROM_NAME: z.string().min(1).max(120).default("Recourse"),
+  EMAIL_INBOUND_ENABLED: optionalBoolean.default(false),
+  EMAIL_INBOUND_POLL_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(10000)
+    .default(60000),
+  EMAIL_WEBHOOK_SECRET: optionalSecret,
+  EMAIL_MAX_BODY_BYTES: z.coerce.number().int().min(1024).default(500000),
+  EMAIL_MAX_ATTACHMENT_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .default(15 * 1024 * 1024),
+
   SENTRY_DSN: optionalUrl,
   SENTRY_ENVIRONMENT: z.string().min(1).default("local"),
   SENTRY_RELEASE: optionalString,
@@ -358,6 +380,18 @@ export const environmentSchema = baseEnvironmentSchema.superRefine(
             message: `${key} is required in production`,
             path: [key],
           });
+        }
+      }
+
+      if (environment.EMAIL_PROVIDER === "gmail") {
+        for (const key of ["GMAIL_EMAIL", "GMAIL_APP_PASSWORD"] as const) {
+          if (!environment[key]) {
+            context.addIssue({
+              code: "custom",
+              message: `${key} is required when EMAIL_PROVIDER=gmail`,
+              path: [key],
+            });
+          }
         }
       }
 

@@ -613,6 +613,106 @@ export class EvidenceService {
     return this.toPublic(completed);
   }
 
+  /**
+   * Inbound provider content is bounded before this method is called. It is
+   * stored in the same private object store as user evidence so response
+   * claims have durable binary/text provenance rather than living only in an
+   * email provider mailbox.
+   */
+  async createInboundTextEvidence(
+    ownerId: string,
+    caseId: string,
+    input: {
+      text: string;
+      providerMessageId: string;
+      receivedAt: Date;
+    },
+  ): Promise<string> {
+    const activeCase = await this.findOwnedCase(ownerId, caseId);
+    const text = input.text.trim();
+    if (!text) {
+      throw new EvidenceInputError(
+        "Inbound response has no usable text.",
+        "INVALID_TEXT",
+      );
+    }
+    const bytes = Buffer.from(text, "utf8");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const existing = await this.evidenceModel
+      .findOne({ caseId: activeCase._id, deletedAt: null, sha256 })
+      .select({ _id: 1 })
+      .exec();
+    if (existing) {
+      return existing._id.toString();
+    }
+
+    if (!this.storage.uploadObject) {
+      throw new StorageProviderError(
+        "The configured storage provider cannot persist inbound evidence.",
+        "NOT_CONFIGURED",
+      );
+    }
+    const storageKey = createOpaqueStorageKey(
+      this.config.get("CLOUDINARY_UPLOAD_FOLDER") ?? "recourse",
+    );
+    const metadata = await this.storage.uploadObject({
+      bytes,
+      contentType: "text/plain; charset=utf-8",
+      storageKey,
+    });
+    try {
+      const evidence = await this.evidenceModel.create({
+        byteSize: bytes.byteLength,
+        caseId: activeCase._id,
+        deletedAt: null,
+        deletionVersion: 0,
+        extension: "txt",
+        extractionCompletedAt: new Date(),
+        extractionMetadata: {
+          inboundProviderMessageId: input.providerMessageId,
+        },
+        extractionMethod: "EML_TEXT",
+        kind: "INSTITUTION_RESPONSE",
+        label: "Inbound institution response",
+        mimeType: "text/plain",
+        originalFilename: "inbound-response.txt",
+        ownerId: activeCase.ownerId,
+        pageCount: null,
+        processingErrorCode: null,
+        processingErrorMessage: null,
+        processingStatus: "READY",
+        revision: 1,
+        sha256,
+        storageAssetId: metadata.assetId,
+        storageKey,
+        storageVersion: metadata.version,
+        uploadExpiresAt: new Date(),
+      });
+      await this.evidenceBlockModel.create({
+        blockIndex: 0,
+        blockType: "EMAIL_BODY",
+        characterEnd: text.length,
+        characterStart: 0,
+        caseId: activeCase._id,
+        evidenceId: evidence._id,
+        extractionMethod: "EML_TEXT",
+        metadata: { receivedAt: input.receivedAt.toISOString() },
+        normalizedText: text.replace(/\s+/gu, " ").trim(),
+        ownerId: activeCase.ownerId,
+        pageNumber: null,
+        provenance: {
+          providerMessageId: input.providerMessageId,
+          receivedAt: input.receivedAt.toISOString(),
+        },
+        text,
+      });
+      return evidence._id.toString();
+    } catch (error) {
+      await this.safeDeleteObject(storageKey);
+      throw error;
+    }
+  }
+
   async listBlocks(
     ownerId: string,
     caseId: string,
