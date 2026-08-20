@@ -51,7 +51,7 @@ export default function ProfilePage() {
         <div className="mt-6">
           <Notice tone="info">
             Profile editing and email verification delivery are not enabled by
-            the current backend provider configuration.
+            the current API surface.
           </Notice>
         </div>
       </Card>

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ConfigService } from "@nestjs/config";
+import type { ConfigService } from "@nestjs/config";
 
 import { parseEnvironment } from "../packages/config/src/index.js";
 import { CloudinaryStorageProvider } from "../apps/api/src/modules/storage/cloudinary-storage.provider.js";
@@ -17,9 +17,12 @@ async function main(): Promise<void> {
     );
   }
 
-  const provider = new CloudinaryStorageProvider(
-    new ConfigService(environment),
-  );
+  const config = {
+    get: <K extends keyof typeof environment>(
+      key: K,
+    ): (typeof environment)[K] => environment[key],
+  } as unknown as ConfigService<typeof environment>;
+  const provider = new CloudinaryStorageProvider(config);
   const health = await provider.healthCheck();
   if (health.status !== "ok") {
     throw new Error(
@@ -29,6 +32,7 @@ async function main(): Promise<void> {
 
   const storageKey = createOpaqueStorageKey(
     `${environment.CLOUDINARY_UPLOAD_FOLDER}/live-check-${randomUUID()}`,
+    "txt",
   );
   const body = Buffer.from("recourse-cloudinary-live-check\n", "utf8");
 

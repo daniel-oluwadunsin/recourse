@@ -1,8 +1,10 @@
+import "api/sentry";
 import "reflect-metadata";
 
 import { NestFactory } from "@nestjs/core";
 
 import { RecourseLogger } from "@recourse/logger";
+import { captureServerException } from "api/sentry";
 
 import { AppModule } from "./app.module";
 
@@ -30,6 +32,7 @@ async function bootstrap(): Promise<void> {
     try {
       await app.close();
     } catch (error: unknown) {
+      captureServerException(error, { component: "worker-shutdown" });
       const message = error instanceof Error ? error.message : String(error);
       if (
         message.includes("Connection is closed") ||
@@ -48,6 +51,7 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap().catch((error: unknown) => {
+  captureServerException(error, { component: "worker-bootstrap" });
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);

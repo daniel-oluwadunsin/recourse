@@ -50,7 +50,11 @@ export function queueOptions(
       stackTraceLimit: 10,
     },
     prefix: config.get("REDIS_PREFIX") ?? "recourse:local:",
-    skipWaitingForReady: role === "producer",
+    // Producers must wait for the initial Redis ready handshake before BullMQ
+    // writes. Skipping it while ioredis has its offline queue disabled leaves
+    // the first durable outbox dispatch permanently retrying against a stream
+    // that was never writable.
+    skipWaitingForReady: false,
   };
 }
 

@@ -69,10 +69,12 @@ export default function DashboardPage() {
           <Metric
             label="Open gaps"
             value={items.reduce(
-              (total, item) => total + item.openCriticalGapCount,
+              (total, item) =>
+                total +
+                (item.readiness?.computedAt ? item.openCriticalGapCount : 0),
               0,
             )}
-            helper="Critical requirements"
+            helper={`${items.filter((item) => !item.readiness?.computedAt).length} case${items.filter((item) => !item.readiness?.computedAt).length === 1 ? "" : "s"} not analyzed`}
           />
         </Card>
       </div>
@@ -120,8 +122,9 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-3">
                     <StatusBadge status={item.status} />
                     <span className="text-xs text-pencil-muted">
-                      {item.openCriticalGapCount} gap
-                      {item.openCriticalGapCount === 1 ? "" : "s"}
+                      {item.readiness?.computedAt
+                        ? `${item.openCriticalGapCount} gap${item.openCriticalGapCount === 1 ? "" : "s"}`
+                        : "Not analyzed"}
                     </span>
                   </div>
                 </Link>

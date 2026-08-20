@@ -3,8 +3,8 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { InjectConnection, InjectModel } from "@nestjs/mongoose";
-import { Connection, isValidObjectId, Model, Types } from "mongoose";
+import { InjectModel } from "@nestjs/mongoose";
+import { isValidObjectId, Model, Types } from "mongoose";
 
 import { type EnvironmentConfig } from "@recourse/config";
 
@@ -44,7 +44,6 @@ export class AuthTokenService {
   constructor(
     private readonly config: ConfigService<EnvironmentConfig>,
     private readonly jwtService: JwtService,
-    @InjectConnection() private readonly connection: Connection,
     @InjectModel(RefreshToken.name)
     private readonly refreshTokenModel: Model<RefreshToken>,
     @InjectModel(AuthToken.name)
@@ -149,10 +148,7 @@ export class AuthTokenService {
       },
     );
 
-    const session = await this.connection.startSession();
-
     try {
-      session.startTransaction();
       const consumed = await this.refreshTokenModel
         .findOneAndUpdate(
           {
@@ -167,39 +163,32 @@ export class AuthTokenService {
               usedAt: new Date(),
             },
           },
-          { returnDocument: "after", session },
+          { returnDocument: "after" },
         )
         .exec();
 
       if (!consumed) {
-        await session.abortTransaction();
         await this.revokeFamily(payload.familyId, "REUSE_DETECTED");
         throw new RefreshTokenReuseDetectedError(payload.sub, payload.familyId);
       }
 
-      await this.refreshTokenModel.create(
-        [
-          {
-            expiresAt: new Date(Date.now() + ttlSeconds * 1000),
-            familyId: payload.familyId,
-            jti: nextJti,
-            revokedAt: null,
-            revokeReason: null,
-            tokenHash: this.hashToken(nextToken),
-            userId: new Types.ObjectId(payload.sub),
-            usedAt: null,
-          },
-        ],
-        { session },
-      );
-      await session.commitTransaction();
+      await this.refreshTokenModel.create({
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+        familyId: payload.familyId,
+        jti: nextJti,
+        revokedAt: null,
+        revokeReason: null,
+        tokenHash: this.hashToken(nextToken),
+        userId: new Types.ObjectId(payload.sub),
+        usedAt: null,
+      });
     } catch (error: unknown) {
-      if (session.inTransaction()) {
-        await session.abortTransaction();
+      if (!(error instanceof RefreshTokenReuseDetectedError)) {
+        // The old token has already been consumed. Revoking the family fails
+        // closed if persistence of its replacement did not complete.
+        await this.revokeFamily(payload.familyId, "ROTATION_FAILED");
       }
       throw error;
-    } finally {
-      await session.endSession();
     }
 
     return {
@@ -230,6 +219,17 @@ export class AuthTokenService {
     return token.userId.toString();
   }
 
+  async revokeAllForUser(
+    userId: string,
+    reason = "ACCOUNT_DELETION",
+  ): Promise<void> {
+    if (!isValidObjectId(userId)) return;
+    await this.refreshTokenModel.updateMany(
+      { userId: new Types.ObjectId(userId), revokedAt: null },
+      { $set: { revokedAt: new Date(), revokeReason: reason } },
+    );
+  }
+
   async issueOneTimeToken(
     userId: string,
     type: AuthTokenType,
@@ -239,6 +239,14 @@ export class AuthTokenService {
       throw new Error("Cannot issue a one-time token for an invalid user ID");
     }
 
+    await this.authTokenModel.updateMany(
+      {
+        consumedAt: null,
+        type,
+        userId: new Types.ObjectId(userId),
+      },
+      { $set: { consumedAt: new Date() } },
+    );
     const rawToken = randomBytes(32).toString("base64url");
     await this.authTokenModel.create({
       consumedAt: null,

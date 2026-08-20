@@ -1,7 +1,6 @@
-import { ConfigService } from "@nestjs/config";
 import { z } from "zod";
 
-import { parseEnvironment } from "@recourse/config";
+import { parseEnvironment } from "../packages/config/src/index.js";
 
 import { GroqProvider } from "../apps/api/src/modules/ai/groq.provider";
 
@@ -12,14 +11,24 @@ const responseSchema = z.object({
 
 async function main(): Promise<void> {
   const environment = parseEnvironment();
-  const provider = new GroqProvider(new ConfigService(environment));
+  const config = {
+    get: <K extends keyof typeof environment>(key: K) => environment[key],
+    getOrThrow: <K extends keyof typeof environment>(key: K) => {
+      const value = environment[key];
+      if (value === undefined || value === null) {
+        throw new Error(`${String(key)} is not configured.`);
+      }
+      return value;
+    },
+  } as ConstructorParameters<typeof GroqProvider>[0];
+  const provider = new GroqProvider(config);
   const health = await provider.healthCheck();
   if (!health.configured) {
     throw new Error("GROQ_API_KEY is not configured.");
   }
 
   const result = await provider.completeStructured({
-    maxCompletionTokens: 100,
+    maxCompletionTokens: 500,
     messages: [
       {
         role: "system",
@@ -29,7 +38,7 @@ async function main(): Promise<void> {
       { role: "user", content: "Set ok to true and value to live-check." },
     ],
     model: environment.GROQ_MODEL_FAST,
-    reasoningEffort: "none",
+    reasoningEffort: "low",
     schema: responseSchema,
     schemaName: "recourse_groq_live_check",
   });

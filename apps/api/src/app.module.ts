@@ -9,7 +9,9 @@ import { RecourseLogger } from "@recourse/logger";
 
 import { AuthorizationModule } from "./common/authorization/authorization.module";
 import { HttpErrorFilter } from "./common/http-error.filter";
+import { ObservabilityModule } from "./common/observability.module";
 import { RequestContextMiddleware } from "./common/request-context.middleware";
+import { SecurityModule } from "./common/security/security.module";
 import { DatabaseModule } from "./database/database.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CasesModule } from "./modules/cases/cases.module";
@@ -26,19 +28,24 @@ import { EmailModule } from "./modules/email/email.module";
 @Module({
   imports: [
     ConfigModule.forRoot({
+      ignoreEnvFile: process.env.NODE_ENV === "test",
       isGlobal: true,
       validate: (config: Record<string, unknown>) => parseEnvironment(config),
     }),
     DatabaseModule,
+    SecurityModule,
+    ObservabilityModule,
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService<EnvironmentConfig>) => {
         const options = {
+          skipIf: () => config.get("NODE_ENV") === "test",
           throttlers: [
             {
-              limit: config.get("AUTH_RATE_LIMIT_LIMIT") ?? 10,
-              ttl: config.get("AUTH_RATE_LIMIT_TTL_MS") ?? 60000,
+              limit: config.get("API_RATE_LIMIT_LIMIT") ?? 120,
+              name: "default",
+              ttl: config.get("API_RATE_LIMIT_TTL_MS") ?? 60000,
             },
           ],
         };

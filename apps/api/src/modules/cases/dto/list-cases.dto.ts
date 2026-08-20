@@ -1,12 +1,5 @@
 import { Type } from "class-transformer";
-import {
-  IsEnum,
-  IsInt,
-  IsMongoId,
-  IsOptional,
-  Max,
-  Min,
-} from "class-validator";
+import { IsEnum, IsInt, IsMongoId, IsOptional, Min } from "class-validator";
 
 import { caseStatusValues } from "@recourse/contracts";
 
@@ -18,7 +11,6 @@ export class ListCasesDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(50)
   limit = 20;
 
   @IsOptional()

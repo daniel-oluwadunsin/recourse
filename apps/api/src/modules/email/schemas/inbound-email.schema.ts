@@ -3,7 +3,7 @@ import { HydratedDocument, SchemaTypes, Types } from "mongoose";
 
 @Schema({ collection: "inbound_emails", timestamps: true })
 export class InboundEmail {
-  @Prop({ required: true, type: String, unique: true })
+  @Prop({ required: true, type: String })
   providerMessageId!: string;
 
   @Prop({ default: null, type: String })

@@ -17,6 +17,7 @@ export interface PublicEvidence {
   byteSize: number;
   sha256: string | null;
   processingStatus: EvidenceDocument["processingStatus"];
+  malwareScanStatus: EvidenceDocument["malwareScanStatus"];
   extractionMethod: EvidenceDocument["extractionMethod"];
   pageCount: number | null;
   processingErrorCode: EvidenceDocument["processingErrorCode"];

@@ -6,13 +6,18 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { useCreateCase, uploadEvidence } from "../../../../lib/queries";
+import {
+  createTextEvidence,
+  useCreateCase,
+  uploadEvidence,
+} from "../../../../lib/queries";
 import { decisionTypes, relationshipTypes } from "../../../../lib/statuses";
 import { ArrowLeft, DocumentText, Upload } from "../../../../components/icons";
 import {
   Button,
   Card,
   Field,
+  LinkButton,
   Notice,
   PageHeader,
   Select,
@@ -30,7 +35,12 @@ const schema = z.object({
   notificationDate: z.string().optional(),
   countryCode: z.string().trim().max(2).optional(),
   regionCode: z.string().trim().max(20).optional(),
-  currency: z.string().trim().length(3).optional(),
+  currency: z
+    .union([
+      z.literal(""),
+      z.string().trim().length(3, "Use a 3-letter currency code."),
+    ])
+    .optional(),
   amount: z.string().trim().max(50).optional(),
   text: z.string().max(100000).optional(),
 });
@@ -44,6 +54,7 @@ export default function NewCasePage() {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -86,23 +97,17 @@ export default function NewCasePage() {
             : null,
       });
       const caseId = created.id;
-      let evidenceFile = file;
-      if (!evidenceFile && values.text?.trim())
-        evidenceFile = new File([values.text], "case-notes.txt", {
-          type: "text/plain",
-        });
-      if (evidenceFile) {
+      setCreatedCaseId(caseId);
+      if (values.text?.trim()) {
+        setStage("Saving private notes");
+        await createTextEvidence(caseId, values.text);
+      }
+      if (file) {
         setStage("Uploading private evidence");
-        const kind = evidenceFile.type.startsWith("image/")
+        const kind = file.type.startsWith("image/")
           ? "SCREENSHOT"
-          : "TEXT";
-        await uploadEvidence(
-          caseId,
-          evidenceFile,
-          kind,
-          setProgress,
-          evidenceFile.name,
-        );
+          : "DECISION_NOTICE";
+        await uploadEvidence(caseId, file, kind, setProgress, file.name);
       }
       setStage("Opening workspace");
       router.push(`/cases/${caseId}`);
@@ -200,7 +205,7 @@ export default function NewCasePage() {
                 <Field label="Financial amount">
                   <TextInput placeholder="Optional" {...register("amount")} />
                 </Field>
-                <Field label="Currency">
+                <Field label="Currency" error={errors.currency?.message}>
                   <TextInput
                     maxLength={3}
                     placeholder="USD"
@@ -214,10 +219,6 @@ export default function NewCasePage() {
                 <DocumentText size={22} className="text-blue" />
                 <div>
                   <h2 className="section-heading">Add notes or evidence</h2>
-                  <p className="mt-1 text-sm text-pencil-muted">
-                    Files go directly to private Cloudinary storage after an API
-                    upload intent.
-                  </p>
                 </div>
               </div>
               <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -294,10 +295,31 @@ export default function NewCasePage() {
                 <li>No external appeal is sent from intake.</li>
               </ul>
             </Card>
-            {error ? <Notice tone="danger">{error}</Notice> : null}
+            {error ? (
+              <Notice tone="danger">
+                <div>
+                  <p>{error}</p>
+                  {createdCaseId ? (
+                    <p className="mt-2">
+                      The case was created. Continue to its evidence page to
+                      retry the upload without creating a duplicate case.
+                    </p>
+                  ) : null}
+                </div>
+              </Notice>
+            ) : null}
+            {createdCaseId && error ? (
+              <LinkButton
+                href={`/cases/${createdCaseId}/evidence`}
+                className="w-full justify-center"
+              >
+                Continue to case evidence
+              </LinkButton>
+            ) : null}
             <Button
               type="submit"
               loading={isSubmitting || create.isPending || Boolean(stage)}
+              disabled={Boolean(createdCaseId)}
               className="w-full"
             >
               Create case

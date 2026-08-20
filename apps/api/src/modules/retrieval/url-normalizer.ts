@@ -55,7 +55,11 @@ export function normalizeUrl(input: string): NormalizedUrl | null {
 }
 
 export function isBlockedHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/\.$/, "");
   if (
     normalized === "localhost" ||
     normalized.endsWith(".local") ||
@@ -80,11 +84,27 @@ export function isBlockedHostname(hostname: string): boolean {
     );
   }
   if (version === 6) {
+    const mappedIpv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/u)?.[1];
+    if (mappedIpv4) return isBlockedHostname(mappedIpv4);
+    const mappedHex = normalized.match(
+      /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/u,
+    );
+    if (mappedHex) {
+      const high = Number.parseInt(mappedHex[1] ?? "0", 16);
+      const low = Number.parseInt(mappedHex[2] ?? "0", 16);
+      return isBlockedHostname(
+        `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`,
+      );
+    }
     return (
       normalized === "::1" ||
       normalized.startsWith("fc") ||
       normalized.startsWith("fd") ||
-      normalized.startsWith("fe8")
+      normalized.startsWith("fe8") ||
+      normalized.startsWith("fe9") ||
+      normalized.startsWith("fea") ||
+      normalized.startsWith("feb") ||
+      normalized === "::"
     );
   }
   return false;

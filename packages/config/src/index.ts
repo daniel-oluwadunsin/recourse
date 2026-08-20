@@ -62,6 +62,9 @@ const baseEnvironmentSchema = z.object({
     .string()
     .regex(/^\/[a-zA-Z0-9/_-]+$/)
     .default("/api/v1"),
+  CORS_ALLOWED_ORIGINS: z.string().default(""),
+  API_RATE_LIMIT_TTL_MS: z.coerce.number().int().min(1000).default(60000),
+  API_RATE_LIMIT_LIMIT: z.coerce.number().int().min(1).default(120),
   LOG_LEVEL: logLevelSchema.default("info"),
 
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
@@ -315,6 +318,19 @@ const baseEnvironmentSchema = z.object({
   RATE_LIMIT_STORAGE: z.enum(["memory", "redis"]).default("redis"),
   AUTH_RATE_LIMIT_TTL_MS: z.coerce.number().int().min(1000).default(60000),
   AUTH_RATE_LIMIT_LIMIT: z.coerce.number().int().min(1).default(10),
+  AUTH_SIGN_IN_RATE_LIMIT: z.coerce.number().int().min(1).default(5),
+  AUTH_SIGN_UP_RATE_LIMIT: z.coerce.number().int().min(1).default(3),
+  AUTH_REFRESH_RATE_LIMIT: z.coerce.number().int().min(1).default(30),
+  ACCOUNT_DELETION_RATE_LIMIT: z.coerce.number().int().min(1).default(3),
+  UPLOAD_RATE_LIMIT: z.coerce.number().int().min(1).default(20),
+  CASE_CREATE_RATE_LIMIT: z.coerce.number().int().min(1).default(20),
+  EMAIL_OUTBOUND_RATE_LIMIT: z.coerce.number().int().min(1).default(10),
+  WEBHOOK_REPLAY_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(30)
+    .max(86400)
+    .default(900),
   TRUST_PROXY: optionalBoolean.default(false),
 
   EMAIL_PROVIDER: z.enum(["none", "gmail"]).default("none"),
@@ -338,10 +354,32 @@ const baseEnvironmentSchema = z.object({
     .int()
     .min(1024)
     .default(15 * 1024 * 1024),
+  EMAIL_MAX_OUTBOUND_PER_USER_DAY: z.coerce.number().int().min(1).default(20),
+
+  MALWARE_SCAN_REQUIRED: optionalBoolean.default(false),
+  MALWARE_SCANNER_URL: optionalUrl,
+  MALWARE_SCAN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
+
+  AI_MAX_OPERATIONS_PER_CASE_DAY: z.coerce.number().int().min(1).default(50),
+  TAVILY_MAX_PROCEDURE_RESOLUTIONS_PER_CASE_DAY: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(5),
+  AI_MAX_INPUT_CHARS: z.coerce.number().int().min(1000).default(100000),
+
+  METRICS_ENABLED: optionalBoolean.default(false),
+  METRICS_TOKEN: optionalSecret,
+  RETENTION_CASE_DAYS: z.coerce.number().int().min(1).default(365),
+  RETENTION_EVIDENCE_DAYS: z.coerce.number().int().min(1).default(365),
+  RETENTION_AUDIT_DAYS: z.coerce.number().int().min(30).default(730),
+  RETENTION_SOURCE_SNAPSHOT_DAYS: z.coerce.number().int().min(30).default(730),
+  DELETION_GRACE_PERIOD_HOURS: z.coerce.number().int().min(0).default(24),
 
   SENTRY_DSN: optionalUrl,
   SENTRY_ENVIRONMENT: z.string().min(1).default("local"),
   SENTRY_RELEASE: optionalString,
+  SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
   OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
   OTEL_EXPORTER_OTLP_HEADERS: optionalString,
   OTEL_SERVICE_NAME: z.string().min(1).default("recourse-api"),
@@ -425,6 +463,47 @@ export const environmentSchema = baseEnvironmentSchema.superRefine(
           code: "custom",
           message: "RATE_LIMIT_STORAGE must be redis in production",
           path: ["RATE_LIMIT_STORAGE"],
+        });
+      }
+
+      if (environment.CORS_ALLOWED_ORIGINS.includes("*")) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "CORS_ALLOWED_ORIGINS cannot contain a wildcard in production",
+          path: ["CORS_ALLOWED_ORIGINS"],
+        });
+      }
+
+      if (environment.METRICS_ENABLED && !environment.METRICS_TOKEN) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "METRICS_TOKEN is required when metrics are enabled in production",
+          path: ["METRICS_TOKEN"],
+        });
+      }
+
+      if (
+        environment.MALWARE_SCAN_REQUIRED &&
+        !environment.MALWARE_SCANNER_URL
+      ) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "MALWARE_SCANNER_URL is required when malware scanning is mandatory",
+          path: ["MALWARE_SCANNER_URL"],
+        });
+      }
+
+      if (
+        environment.MALWARE_SCANNER_URL &&
+        !environment.MALWARE_SCANNER_URL.startsWith("https://")
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "MALWARE_SCANNER_URL must use HTTPS in production",
+          path: ["MALWARE_SCANNER_URL"],
         });
       }
 

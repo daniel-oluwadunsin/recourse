@@ -28,6 +28,7 @@ import { Contradiction } from "../intelligence/schemas/contradiction.schema";
 import { EvidenceRequirementMatch } from "../intelligence/schemas/evidence-requirement-match.schema";
 import { Procedure } from "../procedure/schemas/procedure.schema";
 import { ProcedureVersion } from "../procedure/schemas/procedure-version.schema";
+import { ProceduralClaim } from "../procedure/schemas/procedural-claim.schema";
 import { CaseStateMachineService } from "../cases/case-state-machine.service";
 import {
   AppealComposerService,
@@ -67,6 +68,8 @@ export class ActionService {
     private readonly procedureModel: Model<Procedure>,
     @InjectModel(ProcedureVersion.name)
     private readonly procedureVersionModel: Model<ProcedureVersion>,
+    @InjectModel(ProceduralClaim.name)
+    private readonly proceduralClaimModel: Model<ProceduralClaim>,
     @InjectModel(EvidenceRequirementMatch.name)
     private readonly requirementModel: Model<EvidenceRequirementMatch>,
     @InjectModel(Contradiction.name)
@@ -248,6 +251,13 @@ export class ActionService {
       context.action.status === "APPROVED" ||
       context.action.status === "PREPARED"
     ) {
+      const currentPolicy = await this.evaluateCurrentPolicy(context);
+      if (!currentPolicy.allowed) {
+        await this.invalidateAction(context.action, currentPolicy);
+        throw new ConflictException(
+          "The approved action no longer passes the safety policy.",
+        );
+      }
       return context.action;
     }
     if (context.action.status !== "AWAITING_APPROVAL") {
@@ -314,10 +324,18 @@ export class ActionService {
     const context = await this.loadOwnedAction(ownerId, caseId, actionId);
     const action = context.action;
     if (
-      ["SUCCEEDED", "EXECUTING", "PREPARED", "VERIFICATION_FAILED"].includes(
-        action.status,
-      )
+      ["SUCCEEDED", "EXECUTING", "VERIFICATION_FAILED"].includes(action.status)
     ) {
+      return action;
+    }
+    if (action.status === "PREPARED") {
+      const currentPolicy = await this.evaluateCurrentPolicy(context);
+      if (!currentPolicy.allowed) {
+        await this.invalidateAction(action, currentPolicy);
+        throw new ConflictException(
+          "The prepared action no longer passes the safety policy.",
+        );
+      }
       return action;
     }
     if (action.status !== "APPROVED") {
@@ -586,6 +604,17 @@ export class ActionService {
     );
   }
 
+  private async invalidateAction(
+    action: CaseActionDocument,
+    decision: ReturnType<ActionPolicyEngine["evaluate"]>,
+  ): Promise<void> {
+    action.status = "UNAVAILABLE";
+    action.failureCode =
+      decision.recommendation.gates[0] ?? "CURRENT_POLICY_BLOCKED";
+    action.failureMessage = decision.recommendation.reason;
+    await action.save();
+  }
+
   private async evaluateCurrentPolicy(
     context: {
       action: CaseActionDocument;
@@ -634,6 +663,25 @@ export class ActionService {
       .limit(1)
       .exec();
     const recommendation = context.action.recommendation;
+    const supportingProceduralClaimIds = readRecommendationStrings(
+      recommendation,
+      "supportingProceduralClaimIds",
+    );
+    const validProceduralClaimCount = version
+      ? await this.proceduralClaimModel.countDocuments({
+          _id: {
+            $in: supportingProceduralClaimIds
+              .filter((id) => isValidObjectId(id))
+              .map((id) => new Types.ObjectId(id)),
+          },
+          authorityTier: { $regex: /^TIER_1_/u },
+          procedureVersionId: version._id,
+          verificationStatus: "SUPPORTED",
+        })
+      : 0;
+    const proceduralClaimsRemainValid =
+      supportingProceduralClaimIds.length > 0 &&
+      validProceduralClaimCount === supportingProceduralClaimIds.length;
     return this.policy.evaluate({
       actionType: context.action.actionType,
       appealStatus: appealStatusOverride ?? context.appeal.status,
@@ -658,7 +706,9 @@ export class ActionService {
       procedureVersionMatchesCase:
         Boolean(version) &&
         (context.case.activeProcedureVersionId?.equals(version?._id) ?? false),
-      proceduralGroundingCoverage: context.appeal.proceduralGroundingCoverage,
+      proceduralGroundingCoverage: proceduralClaimsRemainValid
+        ? context.appeal.proceduralGroundingCoverage
+        : 0,
       supportingClaimIds: readRecommendationStrings(
         recommendation,
         "supportingClaimIds",
@@ -667,10 +717,7 @@ export class ActionService {
         recommendation,
         "supportingEvidenceIds",
       ),
-      supportingProceduralClaimIds: readRecommendationStrings(
-        recommendation,
-        "supportingProceduralClaimIds",
-      ),
+      supportingProceduralClaimIds,
       supportingSourceSnapshotIds: readRecommendationStrings(
         recommendation,
         "supportingSourceSnapshotIds",

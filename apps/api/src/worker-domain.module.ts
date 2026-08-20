@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "./database/database.module";
+import { SecurityModule } from "./common/security/security.module";
 import { EvidenceModule } from "./modules/evidence/evidence.module";
 import { ProcedureModule } from "./modules/procedure/procedure.module";
 import { IntelligenceModule } from "./modules/intelligence/intelligence.module";
@@ -14,6 +15,7 @@ import { IntelligenceModule } from "./modules/intelligence/intelligence.module";
   exports: [EvidenceModule, ProcedureModule, IntelligenceModule],
   imports: [
     DatabaseModule,
+    SecurityModule,
     EvidenceModule,
     ProcedureModule,
     IntelligenceModule,

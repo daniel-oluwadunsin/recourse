@@ -9,7 +9,10 @@ import { Case } from "../cases/schemas/case.schema";
 import { Evidence } from "../evidence/schemas/evidence.schema";
 import { EvidenceBlock } from "../evidence/schemas/evidence-block.schema";
 import { claimDedupKey } from "./claim.service";
-import { deterministicConflictStatus } from "./contradiction.service";
+import {
+  candidatePairs,
+  deterministicConflictStatus,
+} from "./contradiction.service";
 import { HybridRetrievalService } from "./hybrid-retrieval.service";
 import { READINESS_VERSION, ReadinessService } from "./readiness.service";
 import { GraphService } from "./graph.service";
@@ -114,6 +117,28 @@ describe("evidence intelligence foundations", () => {
     expect(
       deterministicConflictStatus("VERIFIED_DOCUMENT", "EXTERNAL_VERIFIED"),
     ).toBe("OPEN");
+  });
+
+  it("never treats alternate extractions from the same source block as contradictions", () => {
+    const sharedSource = {
+      location: null,
+      sourceId: new Types.ObjectId().toString(),
+      sourceType: "EVIDENCE_BLOCK" as const,
+    };
+    const claims = [
+      {
+        normalizedType: "DATE",
+        normalizedValue: "August 18, 2026",
+        sourceRefs: [sharedSource],
+      },
+      {
+        normalizedType: "DATE",
+        normalizedValue: "August 19, 2026",
+        sourceRefs: [sharedSource],
+      },
+    ] as ClaimDocument[];
+
+    expect(candidatePairs(claims)).toEqual([]);
   });
 
   it("uses deterministic readiness caps for missing critical requirements", () => {

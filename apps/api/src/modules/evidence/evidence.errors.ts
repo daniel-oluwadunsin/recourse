@@ -7,6 +7,7 @@ import {
 
 import { EvidenceInputError } from "./file-policy.service";
 import { StorageProviderError } from "../storage/storage.types";
+import { MalwareScanError } from "../../common/security/malware-scan.service";
 
 export class EvidenceDeletedError extends Error {
   constructor() {
@@ -29,6 +30,15 @@ export function toEvidenceHttpError(error: unknown): Error {
   }
   if (error instanceof EvidenceDeletedError) {
     return new ConflictException(error.message);
+  }
+  if (error instanceof MalwareScanError) {
+    return error.code === "MALWARE_DETECTED"
+      ? new BadRequestException(
+          "The uploaded file was rejected by security scanning.",
+        )
+      : new ServiceUnavailableException(
+          "File security scanning is temporarily unavailable.",
+        );
   }
   return error instanceof Error
     ? error

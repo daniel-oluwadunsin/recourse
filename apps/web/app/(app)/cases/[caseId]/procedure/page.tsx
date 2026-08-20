@@ -1,9 +1,15 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useProcedure } from "../../../../../lib/queries";
-import { Global, Link1, Warning2 } from "../../../../../components/icons";
+import { useProcedure, useRetryProcedure } from "../../../../../lib/queries";
 import {
+  Global,
+  Link1,
+  Refresh2,
+  Warning2,
+} from "../../../../../components/icons";
+import {
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -16,6 +22,7 @@ import {
 export default function ProcedurePage() {
   const { caseId } = useParams<{ caseId: string }>();
   const query = useProcedure(caseId);
+  const retry = useRetryProcedure(caseId);
   if (query.isLoading)
     return <LoadingState label="Loading verified procedure" />;
   if (query.isError)
@@ -30,6 +37,38 @@ export default function ProcedurePage() {
       />
     );
   const data = query.data;
+  const recovery = data?.review.reason ? (
+    <div className="mt-5">
+      <Notice tone="warning">
+        Procedure resolution stopped safely because{" "}
+        {formatReason(data.review.reason)}.
+        {data.review.retriable
+          ? " Review the decision details and retrieved sources, then retry. Recourse will run retrieval and provenance validation again; it will not bypass validation."
+          : " Review the decision details, sources, and activity log. This failure cannot be bypassed automatically."}
+      </Notice>
+      {data.review.retriable ? (
+        <Button
+          className="mt-4"
+          loading={retry.isPending}
+          onClick={() => retry.mutate()}
+        >
+          <Refresh2 size={17} /> Retry procedure resolution
+        </Button>
+      ) : null}
+      {retry.isError ? (
+        <p className="mt-3 text-sm text-red">
+          {retry.error instanceof Error
+            ? retry.error.message
+            : "Procedure retry could not be started."}
+        </p>
+      ) : null}
+      {retry.isSuccess ? (
+        <p className="mt-3 text-sm text-green">
+          Retry started. Live case activity will update this screen.
+        </p>
+      ) : null}
+    </div>
+  ) : null;
   if (!data?.procedure)
     return (
       <div>
@@ -42,6 +81,7 @@ export default function ProcedurePage() {
           title="No procedure attached yet"
           description="The case has not reached a verified, scope-matching procedure. Search failures are not replaced with model memory."
         />
+        {recovery}
       </div>
     );
   return (
@@ -64,6 +104,7 @@ export default function ProcedurePage() {
           ? "This procedure is attached to the case because its persisted scope matches."
           : `Procedure status is ${data.procedure.status}. Review conflicts and verification before relying on it.`}
       </Notice>
+      {recovery}
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
         <Card>
           <p className="text-xs uppercase tracking-wide text-pencil-muted">
@@ -195,4 +236,28 @@ export default function ProcedurePage() {
       ) : null}
     </div>
   );
+}
+
+function formatReason(reason: string | null): string {
+  if (!reason) return "the procedure could not be verified";
+  const descriptions: Record<string, string> = {
+    AI_INPUT_TOO_LARGE:
+      "the retrieved source packet exceeded the provider's safe input limit",
+    CACHED_PROCEDURE_UNRESOLVED: "the cached procedure is not verified",
+    GROQ_REQUEST_FAILED: "the AI provider rejected the structured request",
+    GROQ_STRUCTURED_OUTPUT_REJECTED:
+      "the AI provider could not produce valid structured output",
+    INVALID_PROVIDER_JSON: "the provider returned invalid structured data",
+    NO_AUTHORITATIVE_SOURCES: "no authoritative source was established",
+    OUTPUT_PROVENANCE_INVALID:
+      "the generated claims cited source paragraphs that were not supplied",
+    PROCEDURE_CONFIDENCE_INSUFFICIENT:
+      "the verified source support was below the required confidence threshold",
+    PROCEDURE_CONFLICTED: "the retrieved procedural sources conflict",
+    PROVIDER_SCHEMA_MISMATCH:
+      "the provider response did not match the required schema",
+    SAFETY_BUDGET_EXHAUSTED:
+      "this case reached its daily retrieval safety limit; retry after the UTC daily reset",
+  };
+  return descriptions[reason] ?? reason.toLowerCase().replaceAll("_", " ");
 }

@@ -1,9 +1,10 @@
 import { useAuthStore } from "./auth-store";
 import { withIds } from "./normalize";
 
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1"
-).replace(/\/$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "/api/v1").replace(
+  /\/$/,
+  "",
+);
 
 export class ApiError extends Error {
   readonly status: number;
@@ -40,10 +41,14 @@ async function readPayload(response: Response): Promise<unknown> {
   }
 }
 
-export async function refreshSession(): Promise<{
+type WebSession = {
   accessToken: string;
   user: import("./types").User;
-}> {
+};
+
+let refreshRequest: Promise<WebSession> | null = null;
+
+async function performRefreshSession(): Promise<WebSession> {
   const response = await fetch(`${API_URL}/auth/refresh`, {
     method: "POST",
     credentials: "include",
@@ -51,7 +56,16 @@ export async function refreshSession(): Promise<{
   });
   const payload = await readPayload(response);
   if (!response.ok) throw new ApiError(response.status, payload);
-  return payload as { accessToken: string; user: import("./types").User };
+  return payload as WebSession;
+}
+
+export function refreshSession(): Promise<WebSession> {
+  if (!refreshRequest) {
+    refreshRequest = performRefreshSession().finally(() => {
+      refreshRequest = null;
+    });
+  }
+  return refreshRequest;
 }
 
 export async function apiFetch<T>(
@@ -104,8 +118,33 @@ export async function signUp(email: string, password: string) {
   );
 }
 
+export async function requestPasswordReset(email: string) {
+  return apiFetch<{ message: string }>(
+    "/auth/password-reset/request",
+    { method: "POST", body: JSON.stringify({ email }) },
+    false,
+  );
+}
+
+export async function resetPassword(token: string, password: string) {
+  return apiFetch<null>(
+    "/auth/password-reset/complete",
+    { method: "POST", body: JSON.stringify({ token, password }) },
+    false,
+  );
+}
+
 export async function logout() {
   await apiFetch<null>("/auth/logout", { method: "POST" }, false);
+}
+
+export async function deleteAccount(password: string) {
+  await apiFetch<null>(
+    "/auth/me",
+    { method: "DELETE", body: JSON.stringify({ password }) },
+    false,
+  );
+  useAuthStore.getState().clearSession();
 }
 
 export async function uploadWithProgress(

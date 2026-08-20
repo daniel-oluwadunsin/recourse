@@ -1,5 +1,3 @@
-import "reflect-metadata";
-
 import mongoose from "mongoose";
 
 import { parseEnvironment } from "@recourse/config";

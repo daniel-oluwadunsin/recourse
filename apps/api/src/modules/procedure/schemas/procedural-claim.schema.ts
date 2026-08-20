@@ -22,6 +22,8 @@ export class ClaimSupport {
   verifierRunId!: Types.ObjectId | null;
 }
 
+export const ClaimSupportSchema = SchemaFactory.createForClass(ClaimSupport);
+
 @Schema({ collection: "procedural_claims", timestamps: true })
 export class ProceduralClaim {
   @Prop({ ref: "ProcedureVersion", required: true, type: SchemaTypes.ObjectId })
@@ -55,7 +57,7 @@ export class ProceduralClaim {
   @Prop({ enum: [...sourceAuthorityTierValues], required: true, type: String })
   authorityTier!: SourceAuthorityTier;
 
-  @Prop({ required: true, type: [ClaimSupport] })
+  @Prop({ required: true, type: [ClaimSupportSchema] })
   support!: ClaimSupport[];
 
   @Prop({ default: [], ref: "ProceduralClaim", type: [SchemaTypes.ObjectId] })

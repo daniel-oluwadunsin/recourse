@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { createHash } from "node:crypto";
 import { isValidObjectId, Model, Types } from "mongoose";
@@ -7,7 +11,10 @@ import { type ClaimEvidenceStatus } from "@recourse/contracts";
 
 import { OwnershipAuthorizationService } from "../../common/authorization/ownership.service";
 import { EvidenceBlock } from "../evidence/schemas/evidence-block.schema";
+import { Evidence } from "../evidence/schemas/evidence.schema";
 import { Case } from "../cases/schemas/case.schema";
+import { CaseEventService } from "../cases/case-events.service";
+import { type CaseActor } from "../cases/cases.types";
 import {
   Claim,
   type ClaimDocument,
@@ -30,7 +37,9 @@ export class ClaimService {
     @InjectModel(Claim.name) private readonly claimModel: Model<Claim>,
     @InjectModel(EvidenceBlock.name)
     private readonly evidenceBlockModel: Model<EvidenceBlock>,
+    @InjectModel(Evidence.name) private readonly evidenceModel: Model<Evidence>,
     private readonly ownership: OwnershipAuthorizationService,
+    private readonly events: CaseEventService,
   ) {}
 
   async upsertExtractedClaims(
@@ -148,6 +157,67 @@ export class ClaimService {
       .find({ caseId: caseDocument._id, resolutionStatus: { $ne: "MERGED" } })
       .sort({ createdAt: 1, _id: 1 })
       .exec();
+  }
+
+  async verifyAgainstEvidence(
+    ownerId: string,
+    caseId: string,
+    evidenceId: string,
+    actor: CaseActor,
+  ): Promise<{ evidenceId: string; verifiedClaimCount: number }> {
+    const caseDocument = await this.ownedCase(ownerId, caseId);
+    if (!isValidObjectId(evidenceId))
+      throw new NotFoundException("Evidence not found.");
+    const evidence = await this.evidenceModel
+      .findOne({
+        _id: new Types.ObjectId(evidenceId),
+        caseId: caseDocument._id,
+        deletedAt: null,
+        ownerId: caseDocument.ownerId,
+      })
+      .exec();
+    if (!evidence) throw new NotFoundException("Evidence not found.");
+    if (evidence.processingStatus !== "READY") {
+      throw new ConflictException(
+        "Only ready evidence can have its extraction confirmed.",
+      );
+    }
+    const blockIds = (
+      await this.evidenceBlockModel
+        .find({ caseId: caseDocument._id, evidenceId: evidence._id })
+        .select({ _id: 1 })
+        .lean()
+        .exec()
+    ).map((block) => block._id.toString());
+    const result = await this.claimModel
+      .updateMany(
+        {
+          caseId: caseDocument._id,
+          ownerId: caseDocument.ownerId,
+          resolutionStatus: { $ne: "MERGED" },
+          status: { $in: ["USER_ASSERTED", "UNKNOWN"] },
+          "sourceRefs.sourceId": { $in: blockIds },
+        },
+        {
+          $set: {
+            status: "VERIFIED_DOCUMENT",
+            userConfirmedAt: new Date(),
+          },
+        },
+      )
+      .exec();
+    await this.events.append({
+      actor,
+      caseId,
+      idempotencyKey: `evidence-claims-confirmed-${evidenceId}-${evidence.revision}`,
+      payload: {
+        evidenceId,
+        verificationScope: "EXTRACTION_MATCHES_DOCUMENT",
+        verifiedClaimCount: result.modifiedCount,
+      },
+      type: "CLAIMS_UPDATED",
+    });
+    return { evidenceId, verifiedClaimCount: result.modifiedCount };
   }
 
   private async activeCase(

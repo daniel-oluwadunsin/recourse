@@ -37,7 +37,7 @@ import {
   ],
   imports: [
     AuthorizationModule,
-    AuthModule,
+    forwardRef(() => AuthModule),
     MongooseModule.forFeature([
       { name: Case.name, schema: CaseSchema },
       { name: Decision.name, schema: DecisionSchema },

@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Kalam, Patrick_Hand } from "next/font/google";
 import "./globals.css";
 import { Providers } from "../components/providers";
 import { ThemeProvider } from "../components/theme-provider";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
+const kalam = Kalam({
+  weight: ["400", "700"],
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-kalam",
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
+const patrickHand = Patrick_Hand({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-patrick-hand",
 });
 
 export const metadata: Metadata = {
@@ -26,9 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${kalam.variable} ${patrickHand.variable} antialiased`}>
         <ThemeProvider>
           <Providers>{children}</Providers>
         </ThemeProvider>

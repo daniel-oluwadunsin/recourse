@@ -26,6 +26,8 @@ describe("retrieval safety and provenance foundations", () => {
       domain: "example.com",
     });
     expect(normalizeUrl("http://127.0.0.1/admin")).toBeNull();
+    expect(normalizeUrl("http://[::ffff:127.0.0.1]/admin")).toBeNull();
+    expect(normalizeUrl("http://[fe80::1]/admin")).toBeNull();
     expect(normalizeUrl("file:///tmp/secret")).toBeNull();
     expect(
       dedupeUrls([
@@ -59,6 +61,30 @@ describe("retrieval safety and provenance foundations", () => {
     expect(unofficial?.authorityTier).toBe("TIER_3_UNOFFICIAL");
     expect(unofficial?.factors.officialDomain).toBe(0);
     expect(official?.factors.jurisdictionMatch).toBe(-35);
+  });
+
+  it("does not promote user-generated pages on an official domain", () => {
+    const service = new AuthorityRankingService();
+    const institution = {
+      verifiedOfficialDomains: ["support.example", "video.example"],
+      categories: [],
+    } as never;
+
+    for (const url of [
+      "https://support.example/product/thread/123/user-answer",
+      "https://support.example/product/community-guide/456/post",
+      "https://video.example/watch?v=creator-upload",
+    ]) {
+      expect(
+        service.rank({
+          url,
+          institution,
+          jurisdictionKey: null,
+          relationship: "CONSUMER",
+          decisionType: "SUSPENSION",
+        })?.authorityTier,
+      ).toBe("TIER_3_UNOFFICIAL");
+    }
   });
 
   it("rejects Tavily calls without a configured key and maps search responses without treating snippets as snapshots", async () => {

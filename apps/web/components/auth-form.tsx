@@ -12,11 +12,19 @@ import { Button, Field, Notice, TextInput } from "./ui";
 import { Lock1 } from "./icons";
 import { Logo } from "./logo";
 
-const schema = z.object({
+const sharedSchema = z.object({
   email: z.string().trim().email("Enter a valid email address."),
+});
+const signInSchema = sharedSchema.extend({
+  // Sign-in must not enforce the sign-up password policy client-side. Existing
+  // accounts may have been created under an older policy; the API remains the
+  // authority for credential verification.
+  password: z.string().min(1, "Enter your password."),
+});
+const signUpSchema = sharedSchema.extend({
   password: z.string().min(12, "Use at least 12 characters."),
 });
-type Values = z.infer<typeof schema>;
+type Values = z.infer<typeof signUpSchema>;
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const router = useRouter();
@@ -28,7 +36,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<Values>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(mode === "sign-in" ? signInSchema : signUpSchema),
     defaultValues: { email: "", password: "" },
   });
   const submit = async (values: Values) => {

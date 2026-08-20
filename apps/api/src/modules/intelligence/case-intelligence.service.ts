@@ -12,12 +12,14 @@ import { type EnvironmentConfig } from "@recourse/config";
 
 import { OwnershipAuthorizationService } from "../../common/authorization/ownership.service";
 import { AIOperationService } from "../ai/ai-operation.service";
+import { hashInput } from "../ai/ai-operation.service";
 import { type CaseAnalysisOutput } from "../ai/operation-schemas";
 import { CaseEventService } from "../cases/case-events.service";
 import { CaseStateMachineService } from "../cases/case-state-machine.service";
 import { Case } from "../cases/schemas/case.schema";
 import { Evidence } from "../evidence/schemas/evidence.schema";
 import { EvidenceBlock } from "../evidence/schemas/evidence-block.schema";
+import { EvidenceService } from "../evidence/evidence.service";
 import { Procedure } from "../procedure/schemas/procedure.schema";
 import { ProcedureVersion } from "../procedure/schemas/procedure-version.schema";
 import {
@@ -32,6 +34,9 @@ import { GraphService } from "./graph.service";
 import { ReadinessService } from "./readiness.service";
 import { RequirementService } from "./requirement.service";
 import { TimelineService } from "./timeline.service";
+import { QueueProducerService } from "../queues/queue-producer.service";
+import { WORKFLOW_VERSION } from "../queues/queue.constants";
+import { type CaseActor } from "../cases/cases.types";
 
 export class CaseIntelligenceError extends Error {
   constructor(
@@ -67,6 +72,8 @@ export class CaseIntelligenceService {
     private readonly config: ConfigService<EnvironmentConfig>,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly ownership: OwnershipAuthorizationService,
+    private readonly queueProducer: QueueProducerService,
+    private readonly evidenceService: EvidenceService,
   ) {}
 
   async processCaseAnalysis(
@@ -94,6 +101,20 @@ export class CaseIntelligenceService {
       ExtractedCaseClaim & { modelRunId: Types.ObjectId }
     > = [];
     const extractedTimeline = [];
+    const [existingClaims, existingTimeline] = await Promise.all([
+      this.claims.listForAnalysis(caseId),
+      this.timeline.listForAnalysis(caseId),
+    ]);
+    const claimSourceIds = new Set(
+      existingClaims.flatMap((claim) =>
+        claim.sourceRefs.map((source) => source.sourceId),
+      ),
+    );
+    const timelineSourceIds = new Set(
+      existingTimeline.flatMap((event) =>
+        event.sourceRefs.map((source) => source.sourceId),
+      ),
+    );
     for (const item of evidence) {
       const blocks = await this.evidenceBlockModel
         .find({ caseId: caseDocument._id, evidenceId: item._id })
@@ -106,6 +127,19 @@ export class CaseIntelligenceService {
         text: block.text,
       }));
       if (nativeBlocks.length === 0) continue;
+      const blockIds = nativeBlocks.map((block) => block.blockId);
+      const extractionState =
+        item.extractionMetadata &&
+        typeof item.extractionMetadata.intelligence === "object" &&
+        item.extractionMetadata.intelligence !== null
+          ? (item.extractionMetadata.intelligence as Record<string, unknown>)
+          : {};
+      const claimsAlreadyExtracted =
+        Boolean(extractionState.claimsExtractedAt) ||
+        blockIds.some((blockId) => claimSourceIds.has(blockId));
+      const timelineAlreadyExtracted =
+        Boolean(extractionState.timelineExtractedAt) ||
+        blockIds.some((blockId) => timelineSourceIds.has(blockId));
       const imageUrl =
         item.mimeType.startsWith("image/") &&
         nativeBlocks.every((block) => block.text.trim().length < 20)
@@ -116,23 +150,44 @@ export class CaseIntelligenceService {
               )
             ).url
           : null;
-      const claimResult = await this.ai.extractDocumentClaims({
-        caseId,
-        evidenceId: item._id.toString(),
-        imageUrl,
-        nativeBlocks,
-      });
-      extractedClaims.push(
-        ...claimResult.output.claims.map((claim) => ({
-          ...claim,
-          modelRunId: claimResult.run._id,
-        })),
-      );
-      const timelineResult = await this.ai.extractTimelineEvents({
-        caseId,
-        evidenceRefs: nativeBlocks,
-      });
-      extractedTimeline.push(...timelineResult.output.events);
+      if (!claimsAlreadyExtracted) {
+        const claimResult = await this.ai.extractDocumentClaims({
+          caseId,
+          evidenceId: item._id.toString(),
+          imageUrl,
+          nativeBlocks,
+        });
+        extractedClaims.push(
+          ...claimResult.output.claims.map((claim) => ({
+            ...claim,
+            modelRunId: claimResult.run._id,
+          })),
+        );
+      }
+      if (!timelineAlreadyExtracted) {
+        const timelineResult = await this.ai.extractTimelineEvents({
+          caseId,
+          evidenceRefs: nativeBlocks,
+        });
+        extractedTimeline.push(...timelineResult.output.events);
+      }
+      if (
+        !extractionState.claimsExtractedAt ||
+        !extractionState.timelineExtractedAt
+      ) {
+        await this.evidenceModel
+          .updateOne(
+            { _id: item._id, deletedAt: null },
+            {
+              $set: {
+                "extractionMetadata.intelligence.claimsExtractedAt": new Date(),
+                "extractionMetadata.intelligence.timelineExtractedAt":
+                  new Date(),
+              },
+            },
+          )
+          .exec();
+      }
     }
     const boundedClaims = extractedClaims.slice(
       0,
@@ -142,9 +197,13 @@ export class CaseIntelligenceService {
       0,
       this.config.get("INTELLIGENCE_MAX_CLAIMS_PER_ANALYSIS") ?? 250,
     );
-    const [claims, timeline] = await Promise.all([
+    await Promise.all([
       this.claims.upsertExtractedClaims(caseId, boundedClaims, null),
       this.timeline.upsertExtractedEvents(caseId, boundedTimeline),
+    ]);
+    const [claims, timeline] = await Promise.all([
+      this.claims.listForAnalysis(caseId),
+      this.timeline.listForAnalysis(caseId),
     ]);
     await this.embeddings.indexEvidenceBlocks(caseDocument._id);
     const contradictionResult = await this.contradictions.analyzeCase(caseId);
@@ -186,19 +245,47 @@ export class CaseIntelligenceService {
       })),
     };
     const analysisResult = await this.ai.analyzeCase(analysisInput);
+    const actionableInputRefs = new Set([
+      ...analysisInput.requirements
+        .filter((requirement) =>
+          ["MISSING", "PARTIAL", "UNCERTAIN"].includes(requirement.status),
+        )
+        .map((requirement) => requirement.requirementKey),
+      ...analysisInput.contradictions
+        .filter((contradiction) =>
+          ["OPEN", "UNKNOWN"].includes(contradiction.status),
+        )
+        .map((contradiction) => contradiction.contradictionId),
+    ]);
+    const analysisOutput: CaseAnalysisOutput = {
+      ...analysisResult.output,
+      unresolvedFacts: analysisResult.output.unresolvedFacts
+        .filter(
+          (fact) =>
+            fact.resolutionOwner === "INSTITUTION" ||
+            fact.inputRefs.some((reference) =>
+              actionableInputRefs.has(reference),
+            ),
+        )
+        .map((fact) => ({
+          ...fact,
+          blocking: isDraftBlockingFact(fact),
+        })),
+    };
     await this.caseModel
       .updateOne(
         { _id: refreshedCase._id, deletedAt: null },
         {
           $set: {
             analysis: {
-              centralIssues: analysisResult.output.centralIssues,
+              centralIssues: analysisOutput.centralIssues,
               computedAt: new Date(),
               modelRunId: analysisResult.run._id.toString(),
-              needsHumanReview: analysisResult.output.needsHumanReview,
-              recommendedNextSteps: analysisResult.output.recommendedNextSteps,
-              supportedClaimIds: analysisResult.output.supportedClaimIds,
-              unresolvedFacts: analysisResult.output.unresolvedFacts,
+              needsHumanReview: analysisOutput.needsHumanReview,
+              recommendedNextSteps: analysisOutput.recommendedNextSteps,
+              supportedClaimIds: analysisOutput.supportedClaimIds,
+              unresolvedFacts: analysisOutput.unresolvedFacts,
+              factAnswers: refreshedCase.analysis?.factAnswers ?? [],
             },
           },
         },
@@ -225,11 +312,7 @@ export class CaseIntelligenceService {
       graph.version,
     );
     const current = await this.analysisCase(caseId, undefined);
-    const targetStatus = targetFor(
-      current,
-      readinessResult,
-      analysisResult.output,
-    );
+    const targetStatus = targetFor(current, readinessResult, analysisOutput);
     const transition = await this.stateMachine.transition(
       caseId,
       targetStatus,
@@ -251,7 +334,7 @@ export class CaseIntelligenceService {
       },
     );
     return {
-      analysis: analysisResult.output,
+      analysis: analysisOutput,
       graphVersion: graph.version,
       readiness: readinessResult.score,
       status: transition.case.status,
@@ -270,6 +353,222 @@ export class CaseIntelligenceService {
       openCriticalGapCount: value.openCriticalGapCount,
       readiness: value.readiness,
     };
+  }
+
+  async retryAnalysis(
+    ownerId: string,
+    caseId: string,
+    actor: CaseActor,
+  ): Promise<{ caseId: string; status: string }> {
+    const value = await this.ownedCase(ownerId, caseId);
+    if (
+      ![
+        "NEEDS_HUMAN",
+        "EVIDENCE_COLLECTION",
+        "READY_TO_APPEAL",
+        "CASE_ANALYSIS",
+      ].includes(value.status)
+    ) {
+      throw new ConflictException(
+        "Case analysis can only be retried from evidence collection, human review, an in-progress analysis, or before appeal drafting.",
+      );
+    }
+    const readyEvidence = await this.evidenceModel.exists({
+      caseId: value._id,
+      deletedAt: null,
+      processingStatus: "READY",
+    });
+    if (!readyEvidence || !value.activeProcedureVersionId) {
+      throw new ConflictException(
+        "Ready evidence and a verified procedure are required for analysis.",
+      );
+    }
+    const analysisCase =
+      value.status === "CASE_ANALYSIS"
+        ? value
+        : (
+            await this.stateMachine.transition(caseId, "CASE_ANALYSIS", actor, {
+              expectedCurrent: [
+                "NEEDS_HUMAN",
+                "EVIDENCE_COLLECTION",
+                "READY_TO_APPEAL",
+              ],
+              expectedRevision: value.revision,
+              idempotencyKey: `case-analysis-user-retry-${caseId}-${value.revision}`,
+              payload: { recovery: "USER_REQUESTED_ANALYSIS_RETRY" },
+            })
+          ).case;
+    const inputHash = hashInput({
+      caseId,
+      revision: analysisCase.revision,
+    });
+    await this.queueProducer.enqueueAIOperation({
+      caseId,
+      correlationId: actor.correlationId ?? null,
+      evidenceId: null,
+      expectedRevision: analysisCase.revision,
+      idempotencyKey: `analyze-case-${caseId}-${analysisCase.revision}-${inputHash}`,
+      inputHash,
+      operation: "analyze-case",
+      workflowVersion: WORKFLOW_VERSION,
+    });
+    return { caseId, status: analysisCase.status };
+  }
+
+  async approveAnalysis(
+    ownerId: string,
+    caseId: string,
+    actor: CaseActor,
+  ): Promise<{ caseId: string; status: string }> {
+    const value = await this.ownedCase(ownerId, caseId);
+    if (
+      value.status !== "NEEDS_HUMAN" ||
+      !value.analysis ||
+      !hasStructuredFacts(value.analysis.unresolvedFacts) ||
+      value.analysis.unresolvedFacts.some(isDraftBlockingFact) ||
+      !value.readiness?.computedAt ||
+      value.readiness.score < 70 ||
+      value.readiness.caps.length > 0
+    ) {
+      throw new ConflictException(
+        "Analysis can only be approved after blocking fact work is complete, with readiness of at least 70 and no safety cap.",
+      );
+    }
+    const transition = await this.stateMachine.transition(
+      caseId,
+      "READY_TO_APPEAL",
+      actor,
+      {
+        expectedCurrent: ["NEEDS_HUMAN"],
+        expectedRevision: value.revision,
+        idempotencyKey: `case-analysis-user-approved-${caseId}-${value.revision}`,
+        payload: {
+          recovery: "USER_ACCEPTED_ANALYSIS_UNCERTAINTY",
+          readinessScore: value.readiness.score,
+          unresolvedFacts: value.analysis.unresolvedFacts,
+        },
+      },
+    );
+    return { caseId, status: transition.case.status };
+  }
+
+  async answerOpenFacts(
+    ownerId: string,
+    caseId: string,
+    answers: Array<{ question: string; answer: string }>,
+    actor: CaseActor,
+  ): Promise<{ caseId: string; evidenceId: string; status: string }> {
+    const value = await this.ownedCase(ownerId, caseId);
+    if (
+      !["NEEDS_HUMAN", "READY_TO_APPEAL"].includes(value.status) ||
+      !value.analysis ||
+      !hasStructuredFacts(value.analysis.unresolvedFacts)
+    ) {
+      throw new ConflictException(
+        "Re-run case analysis before answering open fact questions.",
+      );
+    }
+    const userFacts = value.analysis.unresolvedFacts.filter(
+      (fact) => fact.resolutionOwner === "USER" && fact.userQuestion,
+    );
+    if (userFacts.length === 0) {
+      throw new ConflictException(
+        "This case has no open fact questions assigned to the user.",
+      );
+    }
+    const openQuestions = new Map(
+      userFacts.map((fact) => [
+        normalizeQuestion(fact.userQuestion!),
+        fact.userQuestion!,
+      ]),
+    );
+    const submitted = new Map<string, { question: string; answer: string }>();
+    for (const entry of answers) {
+      const key = normalizeQuestion(entry.question);
+      const canonicalQuestion = openQuestions.get(key);
+      const answer = entry.answer.trim();
+      if (!canonicalQuestion || !answer || submitted.has(key)) {
+        throw new ConflictException(
+          "Answers must uniquely correspond to the current user-assigned questions.",
+        );
+      }
+      submitted.set(key, { question: canonicalQuestion, answer });
+    }
+    if (submitted.size !== openQuestions.size) {
+      throw new ConflictException(
+        "Answer every question assigned to you before analysis continues. Use ‘I do not know’ when the information is unavailable.",
+      );
+    }
+
+    const orderedAnswers = [...submitted.values()];
+    const evidence = await this.evidenceService.createTextEvidence(
+      ownerId,
+      caseId,
+      {
+        kind: "TEXT",
+        label: "Answers to open case facts",
+        text: orderedAnswers
+          .map(
+            (entry, index) =>
+              `Question ${index + 1}: ${entry.question}\nUser answer: ${entry.answer}`,
+          )
+          .join("\n\n"),
+      },
+      {
+        actorId: actor.actorId,
+        actorType: "USER",
+        correlationId: actor.correlationId,
+      },
+    );
+    const answeredAt = new Date();
+    await this.caseModel
+      .updateOne(
+        { _id: value._id, deletedAt: null },
+        {
+          $set: {
+            "analysis.factAnswers": [
+              ...(value.analysis.factAnswers ?? []),
+              ...orderedAnswers.map((entry) => ({
+                ...entry,
+                answeredAt,
+                evidenceId: evidence.id,
+              })),
+            ],
+          },
+        },
+      )
+      .exec();
+
+    const transition = await this.stateMachine.transition(
+      caseId,
+      "CASE_ANALYSIS",
+      actor,
+      {
+        expectedCurrent: ["NEEDS_HUMAN", "READY_TO_APPEAL"],
+        expectedRevision: value.revision,
+        idempotencyKey: `case-fact-answers-${caseId}-${value.revision}`,
+        payload: {
+          answerCount: orderedAnswers.length,
+          evidenceId: evidence.id,
+          recovery: "USER_ANSWERED_OPEN_FACTS",
+        },
+      },
+    );
+    const inputHash = hashInput({
+      caseId,
+      revision: transition.case.revision,
+    });
+    await this.queueProducer.enqueueAIOperation({
+      caseId,
+      correlationId: actor.correlationId ?? null,
+      evidenceId: null,
+      expectedRevision: transition.case.revision,
+      idempotencyKey: `analyze-case-${caseId}-${transition.case.revision}-${inputHash}`,
+      inputHash,
+      operation: "analyze-case",
+      workflowVersion: WORKFLOW_VERSION,
+    });
+    return { caseId, evidenceId: evidence.id, status: transition.case.status };
   }
 
   private async emitIntelligenceEvents(
@@ -400,6 +699,7 @@ function targetFor(
 ): "EVIDENCE_COLLECTION" | "READY_TO_APPEAL" | "NEEDS_HUMAN" {
   if (
     analysis.needsHumanReview ||
+    analysis.unresolvedFacts.some(isDraftBlockingFact) ||
     readiness.caps.includes("UNRESOLVED_MATERIAL_CONTRADICTION")
   )
     return "NEEDS_HUMAN";
@@ -407,4 +707,26 @@ function targetFor(
     return "READY_TO_APPEAL";
   if (caseDocument.status === "CASE_ANALYSIS") return "EVIDENCE_COLLECTION";
   return "NEEDS_HUMAN";
+}
+
+function normalizeQuestion(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").toLowerCase();
+}
+
+function hasStructuredFacts(value: readonly unknown[]): boolean {
+  return value.every(
+    (fact) =>
+      typeof fact === "object" &&
+      fact !== null &&
+      "resolutionOwner" in fact &&
+      "blocking" in fact,
+  );
+}
+
+function isDraftBlockingFact(
+  fact: CaseAnalysisOutput["unresolvedFacts"][number],
+): boolean {
+  // Information only the institution can disclose must be requested in the
+  // appeal; treating it as a pre-appeal blocker would create a deadlock.
+  return fact.resolutionOwner !== "INSTITUTION";
 }

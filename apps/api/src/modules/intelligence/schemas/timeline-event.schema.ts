@@ -5,7 +5,7 @@ import {
   timelineDatePrecisionValues,
   type TimelineDatePrecision,
 } from "@recourse/contracts";
-import { ClaimSourceRef } from "./claim.schema";
+import { ClaimSourceRef, ClaimSourceRefSchema } from "./claim.schema";
 
 @Schema({ collection: "timeline_events", timestamps: true })
 export class TimelineEvent {
@@ -34,7 +34,7 @@ export class TimelineEvent {
   })
   datePrecision!: TimelineDatePrecision;
 
-  @Prop({ default: [], type: [ClaimSourceRef] })
+  @Prop({ default: [], type: [ClaimSourceRefSchema] })
   sourceRefs!: ClaimSourceRef[];
 
   @Prop({ min: 0, max: 1, required: true, type: Number })

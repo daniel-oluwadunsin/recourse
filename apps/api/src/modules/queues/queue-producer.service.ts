@@ -1,4 +1,4 @@
-import { Injectable, OnApplicationShutdown } from "@nestjs/common";
+import { Injectable, OnApplicationShutdown, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Queue } from "bullmq";
 
@@ -27,12 +27,17 @@ import {
 } from "./queue.constants";
 import { queueOptions } from "./redis-options";
 import { type EnvironmentConfig } from "@recourse/config";
+import { ApplicationObservabilityService } from "../../common/observability.service";
 
 @Injectable()
 export class QueueProducerService implements OnApplicationShutdown {
   private readonly queues = new Map<QueueName, Queue>();
 
-  constructor(private readonly config: ConfigService<EnvironmentConfig>) {}
+  constructor(
+    private readonly config: ConfigService<EnvironmentConfig>,
+    @Optional()
+    private readonly observability?: ApplicationObservabilityService,
+  ) {}
 
   async enqueueCaseEvent(
     payload: CaseEventJobPayload,
@@ -46,6 +51,7 @@ export class QueueProducerService implements OnApplicationShutdown {
         jobId,
       },
     );
+    this.recordEnqueue(QUEUE_NAMES.CASE_ORCHESTRATION);
     return { duplicateSafe: true, jobId };
   }
 
@@ -63,6 +69,7 @@ export class QueueProducerService implements OnApplicationShutdown {
       parsed,
       { jobId },
     );
+    this.recordEnqueue(QUEUE_NAMES.EVIDENCE_PROCESSING);
     return { duplicateSafe: true, jobId };
   }
 
@@ -76,6 +83,7 @@ export class QueueProducerService implements OnApplicationShutdown {
       parsed,
       { jobId },
     );
+    this.recordEnqueue(QUEUE_NAMES.MAINTENANCE);
     return { duplicateSafe: true, jobId };
   }
 
@@ -94,6 +102,7 @@ export class QueueProducerService implements OnApplicationShutdown {
       parsed,
       { jobId },
     );
+    this.recordEnqueue(QUEUE_NAMES.PROCEDURE_RETRIEVAL);
     return { duplicateSafe: true, jobId };
   }
 
@@ -113,6 +122,7 @@ export class QueueProducerService implements OnApplicationShutdown {
       parsed,
       { jobId },
     );
+    this.recordEnqueue(QUEUE_NAMES.AI_OPERATIONS);
     return { duplicateSafe: true, jobId };
   }
 
@@ -134,6 +144,7 @@ export class QueueProducerService implements OnApplicationShutdown {
     await this.queue(queueName).add(jobName, parsed, {
       jobId: stableJobId(jobId),
     });
+    this.recordEnqueue(queueName);
   }
 
   async enqueueNotification(
@@ -149,6 +160,7 @@ export class QueueProducerService implements OnApplicationShutdown {
       parsed,
       { delay, jobId },
     );
+    this.recordEnqueue(QUEUE_NAMES.NOTIFICATIONS);
     return { duplicateSafe: true, jobId };
   }
 
@@ -192,5 +204,14 @@ export class QueueProducerService implements OnApplicationShutdown {
       this.queues.set(name, queue);
     }
     return queue;
+  }
+
+  private recordEnqueue(queue: QueueName): void {
+    this.observability?.metrics.increment(
+      "recourse_queue_jobs_enqueued_total",
+      {
+        queue,
+      },
+    );
   }
 }

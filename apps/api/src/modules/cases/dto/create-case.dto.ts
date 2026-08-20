@@ -7,7 +7,6 @@ import {
   IsString,
   IsUppercase,
   Length,
-  MaxLength,
   MinLength,
   ValidateNested,
 } from "class-validator";
@@ -20,7 +19,6 @@ import {
 export class FinancialImpactDto {
   @IsOptional()
   @IsString()
-  @MaxLength(50)
   amount?: string | null;
 
   @IsOptional()
@@ -37,24 +35,20 @@ export class JurisdictionRefDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(20)
   regionCode?: string | null;
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
   source?: string | null;
 }
 
 export class CreateCaseDto {
   @IsString()
   @MinLength(1)
-  @MaxLength(200)
   title!: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(200)
   institutionName?: string | null;
 
   @IsOptional()
@@ -67,7 +61,6 @@ export class CreateCaseDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(10000)
   statedReason?: string | null;
 
   @IsOptional()

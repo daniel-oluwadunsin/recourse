@@ -5,7 +5,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  MaxLength,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -20,7 +19,6 @@ import { FinancialImpactDto, JurisdictionRefDto } from "./create-case.dto";
 export class DecisionCorrectionsDto {
   @IsOptional()
   @IsString()
-  @MaxLength(200)
   institutionName?: string | null;
 
   @IsOptional()
@@ -33,7 +31,6 @@ export class DecisionCorrectionsDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(10000)
   statedReason?: string | null;
 
   @IsOptional()
@@ -64,7 +61,6 @@ export class UpdateCaseDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(200)
   title?: string;
 
   @IsOptional()

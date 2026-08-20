@@ -271,7 +271,18 @@ export type CaseAnalysisInput = z.infer<typeof caseAnalysisInputSchema>;
 
 export const caseAnalysisOutputSchema = z.object({
   centralIssues: z.array(boundedText).max(20),
-  unresolvedFacts: z.array(boundedText).max(50),
+  unresolvedFacts: z
+    .array(
+      z.object({
+        fact: boundedText,
+        resolutionOwner: z.enum(["USER", "RECOURSE", "INSTITUTION"]),
+        resolutionAction: boundedText,
+        userQuestion: boundedText.nullable(),
+        blocking: z.boolean(),
+        inputRefs: z.array(z.string().min(1).max(200)).max(20),
+      }),
+    )
+    .max(50),
   supportedClaimIds: z.array(z.string().min(1).max(200)).max(250),
   recommendedNextSteps: z.array(boundedText).max(20),
   needsHumanReview: z.boolean(),

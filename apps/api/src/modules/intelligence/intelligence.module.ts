@@ -9,6 +9,7 @@ import { CasesModule } from "../cases/cases.module";
 import { Case, CaseSchema } from "../cases/schemas/case.schema";
 import { Evidence } from "../evidence/schemas/evidence.schema";
 import { EvidenceSchema } from "../evidence/schemas/evidence.schema";
+import { EvidenceModule } from "../evidence/evidence.module";
 import {
   EvidenceBlock,
   EvidenceBlockSchema,
@@ -54,6 +55,7 @@ import { IntelligenceController } from "./intelligence.controller";
 import { ReadinessService } from "./readiness.service";
 import { RequirementService } from "./requirement.service";
 import { TimelineService } from "./timeline.service";
+import { QueuesModule } from "../queues/queues.module";
 
 @Module({
   controllers: [IntelligenceController],
@@ -71,6 +73,7 @@ import { TimelineService } from "./timeline.service";
     forwardRef(() => AIModule),
     CasesModule,
     EmbeddingsModule,
+    EvidenceModule,
     StorageModule,
     MongooseModule.forFeature([
       { name: Case.name, schema: CaseSchema },
@@ -90,6 +93,7 @@ import { TimelineService } from "./timeline.service";
       { name: GraphNode.name, schema: GraphNodeSchema },
       { name: GraphEdge.name, schema: GraphEdgeSchema },
     ]),
+    QueuesModule,
   ],
   providers: [
     CaseIntelligenceService,

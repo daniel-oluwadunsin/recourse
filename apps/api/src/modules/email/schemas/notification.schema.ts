@@ -23,7 +23,7 @@ export class Notification {
   @Prop({ required: true, maxlength: 2000, type: String })
   body!: string;
 
-  @Prop({ required: true, type: String, unique: true })
+  @Prop({ required: true, type: String })
   deduplicationKey!: string;
 
   @Prop({ default: [], enum: [...notificationChannelValues], type: [String] })

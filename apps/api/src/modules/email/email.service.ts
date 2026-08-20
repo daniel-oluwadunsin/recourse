@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -20,6 +21,7 @@ import { QueueProducerService } from "../queues/queue-producer.service";
 import { Case } from "../cases/schemas/case.schema";
 import { User } from "../users/schemas/user.schema";
 import { EMAIL_PROVIDER, type EmailProvider } from "./email.types";
+import { UsageBudgetService } from "../../common/security/usage-budget.service";
 import { CaseEmailTokenService } from "./case-email-token.service";
 import {
   OutboundEmail,
@@ -38,6 +40,7 @@ export class EmailService {
     private readonly queueProducer: QueueProducerService,
     private readonly audit: AuditLogService,
     private readonly tokens: CaseEmailTokenService,
+    @Optional() private readonly budget?: UsageBudgetService,
   ) {}
 
   isConfigured(): boolean {
@@ -46,6 +49,54 @@ export class EmailService {
 
   createCaseReplyTo(ownerId: string, caseId: string): Promise<string> {
     return this.tokens.create(ownerId, caseId);
+  }
+
+  async sendSecurityEmail(input: {
+    userId: string;
+    to: string;
+    subject: string;
+    text: string;
+    idempotencyKey: string;
+  }): Promise<void> {
+    if (!isSafeAddress(input.to)) {
+      throw new ConflictException("Outbound email recipient is invalid.");
+    }
+    if (!this.provider.isConfigured()) {
+      throw new ServiceUnavailableException(
+        "Transactional email is unavailable until Gmail is configured.",
+      );
+    }
+    if (this.budget) await this.budget.consumeOutboundEmail(input.userId);
+    try {
+      const result = await this.provider.send({
+        fromName: this.config.get("EMAIL_FROM_NAME") ?? "Recourse",
+        idempotencyKey: input.idempotencyKey,
+        replyTo: null,
+        subject: input.subject,
+        text: input.text,
+        to: input.to,
+      });
+      if (!result.accepted || !result.providerMessageId) {
+        throw new ServiceUnavailableException(
+          "The email provider did not confirm acceptance.",
+        );
+      }
+      await this.audit.record(
+        AuditEventType.EMAIL_OUTBOUND_ACCEPTED,
+        { userId: input.userId },
+        AuditOutcome.SUCCESS,
+        { providerMessageId: result.providerMessageId, purpose: "SECURITY" },
+      );
+    } catch (error: unknown) {
+      await this.audit.record(
+        AuditEventType.EMAIL_OUTBOUND_FAILED,
+        { userId: input.userId },
+        AuditOutcome.FAILURE,
+        { purpose: "SECURITY" },
+        "SECURITY_EMAIL_FAILED",
+      );
+      throw error;
+    }
   }
 
   async createOutbound(input: {
@@ -61,6 +112,12 @@ export class EmailService {
       .findOne({ idempotencyKey: input.idempotencyKey })
       .exec();
     if (existing) return existing;
+    if (!isSafeAddress(input.to)) {
+      throw new ConflictException("Outbound email recipient is invalid.");
+    }
+    if (input.ownerId && this.budget) {
+      await this.budget.consumeOutboundEmail(input.ownerId);
+    }
     if (!this.provider.isConfigured()) {
       throw new ServiceUnavailableException(
         "Transactional email is unavailable until Gmail is configured.",
@@ -209,4 +266,12 @@ export class EmailService {
   }> {
     return this.provider.verifyConnection();
   }
+}
+
+function isSafeAddress(value: string): boolean {
+  return (
+    value.length <= 320 &&
+    !/[\r\n\0]/u.test(value) &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)
+  );
 }

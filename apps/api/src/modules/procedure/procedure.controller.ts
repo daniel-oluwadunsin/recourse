@@ -1,4 +1,14 @@
-import { Controller, Get, Param, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
+
+import { getRequestContext } from "@recourse/logger";
 
 import { AccessTokenGuard } from "../auth/guards/access-token.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -37,5 +47,18 @@ export class ProcedureController {
     @Param("caseId") caseId: string,
   ) {
     return this.procedureService.runsForCase(user.userId, caseId);
+  }
+
+  @Post("retry")
+  @HttpCode(HttpStatus.ACCEPTED)
+  retry(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("caseId") caseId: string,
+  ) {
+    return this.procedureService.retryResolution(user.userId, caseId, {
+      actorId: user.userId,
+      actorType: "USER",
+      correlationId: getRequestContext()?.correlationId,
+    });
   }
 }

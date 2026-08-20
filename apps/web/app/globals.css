@@ -43,9 +43,15 @@ body {
 
 body {
   background: var(--background);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--line) 78%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
   color: var(--foreground);
   min-height: 100vh;
-  font-family: var(--font-geist-sans), Arial, sans-serif;
+  font-family: var(--font-patrick-hand), "Comic Sans MS", cursive;
+  font-size: 1.05rem;
 }
 
 a {
@@ -87,8 +93,8 @@ select:focus-visible {
   width: 260px;
   min-height: 100vh;
   flex-direction: column;
-  border-right: 1px solid var(--line);
-  background: var(--background);
+  border-right: 3px solid var(--foreground);
+  background: color-mix(in srgb, var(--background) 96%, transparent);
   padding: 1.5rem;
 }
 .shell-content {
@@ -103,7 +109,7 @@ select:focus-visible {
   display: flex;
   min-height: 70px;
   align-items: center;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 2px dashed var(--line);
   background: color-mix(in srgb, var(--background) 92%, transparent);
   padding: 0 2.5rem;
   backdrop-filter: blur(14px);
@@ -118,7 +124,7 @@ select:focus-visible {
   min-height: 40px;
   min-width: 40px;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 48% 52% 46% 54% / 55% 42% 58% 45%;
   color: var(--muted-foreground);
   transition:
     background 0.2s,
@@ -128,12 +134,17 @@ select:focus-visible {
   background: var(--muted);
   color: var(--foreground);
 }
+@media (min-width: 901px) {
+  .mobile-nav-button {
+    display: none;
+  }
+}
 .nav-link {
   display: flex;
   min-height: 44px;
   align-items: center;
   gap: 0.75rem;
-  border-radius: 10px;
+  border-radius: 18px 7px 16px 6px / 6px 15px 8px 17px;
   padding: 0.65rem 0.8rem;
   color: var(--muted-foreground);
   font-size: 0.9rem;
@@ -148,20 +159,22 @@ select:focus-visible {
   color: var(--foreground);
 }
 .paper-card {
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: 2px solid var(--foreground);
+  border-radius: 27px 9px 24px 11px / 10px 26px 8px 23px;
   background: var(--paper-card);
   padding: 1.25rem;
   box-shadow: 4px 4px 0 var(--shadow);
 }
 .eyebrow {
   color: #2d5da1;
-  font-size: 0.72rem;
+  font-family: var(--font-kalam), "Comic Sans MS", cursive;
+  font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 .display-heading {
+  font-family: var(--font-kalam), "Comic Sans MS", cursive;
   font-size: clamp(2rem, 3.6vw, 3.3rem);
   font-weight: 750;
   letter-spacing: -0.05em;
@@ -171,6 +184,7 @@ select:focus-visible {
   font-size: clamp(1.7rem, 2.7vw, 2.6rem);
 }
 .section-heading {
+  font-family: var(--font-kalam), "Comic Sans MS", cursive;
   font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -178,7 +192,8 @@ select:focus-visible {
 .status-badge {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  border-radius: 51% 49% 46% 54% / 44% 56% 47% 53%;
   padding: 0.3rem 0.6rem;
   font-size: 0.7rem;
   font-weight: 800;
@@ -202,7 +217,7 @@ select:focus-visible {
   align-items: flex-start;
   gap: 0.9rem;
   border: 1px dashed var(--line);
-  border-radius: 14px;
+  border-radius: 19px 7px 21px 8px / 8px 20px 7px 18px;
   background: var(--muted);
   padding: 1.25rem;
   color: var(--muted-foreground);
@@ -211,7 +226,8 @@ select:focus-visible {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
-  border-radius: 12px;
+  border: 2px dashed currentColor;
+  border-radius: 17px 6px 20px 8px / 7px 18px 6px 21px;
   padding: 0.85rem 1rem;
   font-size: 0.88rem;
   line-height: 1.5;
@@ -253,12 +269,12 @@ select:focus-visible {
 }
 .input {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 2px solid var(--foreground);
+  border-radius: 17px 6px 15px 8px / 7px 16px 6px 18px;
   background: var(--background);
   color: var(--foreground);
   padding: 0.72rem 0.8rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
   outline: none;
   transition:
     border-color 0.2s,
@@ -322,7 +338,7 @@ select:focus-visible {
   align-items: center;
   gap: 0.65rem;
   border-left: 2px solid transparent;
-  border-radius: 0 8px 8px 0;
+  border-radius: 5px 15px 8px 18px / 16px 7px 17px 6px;
   padding: 0.65rem 0.7rem;
   color: var(--muted-foreground);
   font-size: 0.82rem;
@@ -365,8 +381,9 @@ select:focus-visible {
 }
 .table-wrap {
   overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: 2px solid var(--foreground);
+  border-radius: 20px 7px 18px 9px / 8px 19px 7px 21px;
+  box-shadow: 3px 3px 0 var(--shadow);
 }
 .data-table {
   width: 100%;
@@ -393,6 +410,39 @@ select:focus-visible {
 }
 .data-table tbody tr:hover {
   background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+.case-row {
+  position: relative;
+  cursor: pointer;
+}
+.case-row-link::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+}
+.case-row:focus-within {
+  outline: 3px solid #2d5da1;
+  outline-offset: -3px;
+}
+.wobbly-button {
+  border: 3px solid var(--foreground);
+  border-radius: 22px 7px 20px 8px / 8px 21px 7px 23px;
+  box-shadow: 4px 4px 0 var(--shadow);
+  font-family: var(--font-patrick-hand), "Comic Sans MS", cursive;
+  letter-spacing: 0.01em;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s,
+    background 0.1s,
+    color 0.1s;
+}
+.wobbly-button:hover:not(:disabled) {
+  box-shadow: 2px 2px 0 var(--shadow);
+  transform: translate(2px, 2px) rotate(-0.4deg);
+}
+.wobbly-button:active:not(:disabled) {
+  box-shadow: none;
+  transform: translate(4px, 4px);
 }
 .progress-track {
   height: 8px;
@@ -468,8 +518,8 @@ select:focus-visible {
 }
 .graph-canvas {
   min-height: 520px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: 2px solid var(--foreground);
+  border-radius: 24px 8px 20px 10px / 9px 22px 8px 25px;
   background-image: radial-gradient(
     color-mix(in srgb, var(--muted-foreground) 24%, transparent) 1px,
     transparent 1px

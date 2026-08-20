@@ -82,6 +82,11 @@ describe("evidence state machine and opaque storage keys", () => {
 
     const key = createOpaqueStorageKey("recourse");
     expect(key).toMatch(/^recourse\/evidence\/[a-f0-9-]+\.bin$/);
+    const textKey = createOpaqueStorageKey("recourse", "txt");
+    expect(textKey).toMatch(/^recourse\/evidence\/[a-f0-9-]+\.txt$/);
+    expect(() => createOpaqueStorageKey("recourse", "exe")).toThrowError(
+      StorageProviderError,
+    );
     expect(() => assertOpaqueStorageKey("recourse/../secret.bin")).toThrowError(
       StorageProviderError,
     );

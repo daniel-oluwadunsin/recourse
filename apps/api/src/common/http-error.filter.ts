@@ -10,6 +10,7 @@ import type { Request, Response } from "express";
 
 import { type ApiErrorCode } from "@recourse/contracts";
 import { RecourseLogger, getRequestContext } from "@recourse/logger";
+import { captureServerException } from "../sentry";
 
 @Catch()
 @Injectable()
@@ -27,11 +28,15 @@ export class HttpErrorFilter implements ExceptionFilter {
         : HttpStatus.INTERNAL_SERVER_ERROR;
     const { code, message, details } = this.toErrorDetails(exception, status);
 
+    if (status >= 500) {
+      captureServerException(exception, { code, path: request.path });
+    }
+
     this.logger.error(
       {
         code,
         method: request.method,
-        path: request.url,
+        path: request.path,
         status,
       },
       undefined,
@@ -78,11 +83,13 @@ export class HttpErrorFilter implements ExceptionFilter {
       code,
       message: isValidationError
         ? "Request validation failed."
-        : status >= 500
-          ? "Service unavailable."
-          : typeof responseRecord?.message === "string"
-            ? responseRecord.message
-            : exception.message,
+        : status === HttpStatus.TOO_MANY_REQUESTS
+          ? "Too many requests. Please wait and try again."
+          : status >= 500
+            ? "Service unavailable."
+            : typeof responseRecord?.message === "string"
+              ? responseRecord.message
+              : exception.message,
       details: isValidationError ? { issues: validationMessages } : {},
     };
   }

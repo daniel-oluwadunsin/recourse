@@ -13,6 +13,7 @@ import { useAuthStore } from "./auth-store";
 import type {
   Appeal,
   CaseAction,
+  CaseAnalysis,
   CaseEvent,
   CaseRecord,
   CaseResponse,
@@ -21,6 +22,7 @@ import type {
   Deadline,
   Evidence,
   EvidenceBlock,
+  EvidenceKind,
   GraphResponse,
   Notification,
   Paginated,
@@ -71,6 +73,14 @@ export function useEvidence(caseId: string) {
     queryFn: () =>
       apiFetch<Paginated<Evidence>>(`/cases/${caseId}/evidence?limit=100`),
     enabled: Boolean(caseId),
+    refetchInterval: (query) => {
+      const data = query.state.data as Paginated<Evidence> | undefined;
+      return data?.items.some((item) =>
+        ["UPLOADING", "UPLOADED", "PROCESSING"].includes(item.processingStatus),
+      )
+        ? 5000
+        : false;
+    },
   });
 }
 export function useEvidenceDetail(caseId: string, evidenceId: string) {
@@ -100,8 +110,74 @@ export function useProcedure(caseId: string) {
         version: ProcedureVersion | null;
         claims: ProceduralClaim[];
         sources: SourceSnapshot[];
+        review: { reason: string | null; retriable: boolean };
       }>(`/cases/${caseId}/procedure`),
     enabled: Boolean(caseId),
+  });
+}
+export function useRetryProcedure(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ caseId: string; status: string }>(
+        `/cases/${caseId}/procedure/retry`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["case", caseId] });
+      void client.invalidateQueries({ queryKey: ["procedure", caseId] });
+      void client.invalidateQueries({ queryKey: ["events", caseId] });
+      void client.invalidateQueries({ queryKey: ["cases"] });
+    },
+  });
+}
+export function useRetryAnalysis(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ caseId: string; status: string }>(
+        `/cases/${caseId}/analysis/retry`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["case", caseId] });
+      void client.invalidateQueries({ queryKey: ["analysis", caseId] });
+      void client.invalidateQueries({ queryKey: ["events", caseId] });
+      void client.invalidateQueries({ queryKey: ["cases"] });
+    },
+  });
+}
+export function useApproveAnalysis(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ caseId: string; status: string }>(
+        `/cases/${caseId}/analysis/approve`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["case", caseId] });
+      void client.invalidateQueries({ queryKey: ["analysis", caseId] });
+      void client.invalidateQueries({ queryKey: ["events", caseId] });
+      void client.invalidateQueries({ queryKey: ["cases"] });
+    },
+  });
+}
+export function useAnswerOpenFacts(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (answers: Array<{ question: string; answer: string }>) =>
+      apiFetch<{ caseId: string; evidenceId: string; status: string }>(
+        `/cases/${caseId}/analysis/answers`,
+        { method: "POST", body: JSON.stringify({ answers }) },
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["case", caseId] });
+      void client.invalidateQueries({ queryKey: ["analysis", caseId] });
+      void client.invalidateQueries({ queryKey: ["evidence", caseId] });
+      void client.invalidateQueries({ queryKey: ["events", caseId] });
+      void client.invalidateQueries({ queryKey: ["cases"] });
+    },
   });
 }
 export function useProcedureSources(caseId: string) {
@@ -125,6 +201,20 @@ export function useClaims(caseId: string) {
     queryKey: ["claims", caseId],
     queryFn: () => apiFetch<Claim[]>(`/cases/${caseId}/claims`),
     enabled: Boolean(caseId),
+  });
+}
+export function useVerifyEvidenceClaims(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (evidenceId: string) =>
+      apiFetch<{ evidenceId: string; verifiedClaimCount: number }>(
+        `/cases/${caseId}/claims/verify-evidence/${evidenceId}`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["claims", caseId] });
+      void client.invalidateQueries({ queryKey: ["events", caseId] });
+    },
   });
 }
 export function useTimeline(caseId: string) {
@@ -161,7 +251,7 @@ export function useAnalysis(caseId: string) {
     queryKey: ["analysis", caseId],
     queryFn: () =>
       apiFetch<{
-        analysis: Record<string, unknown> | null;
+        analysis: CaseAnalysis | null;
         contradictionCount: number;
         openCriticalGapCount: number;
         readiness: Readiness | null;
@@ -181,6 +271,13 @@ export function useResponses(caseId: string) {
     queryKey: ["responses", caseId],
     queryFn: () => apiFetch<CaseResponse[]>(`/cases/${caseId}/responses`),
     enabled: Boolean(caseId),
+    refetchInterval: (query) => {
+      const data = query.state.data as CaseResponse[] | undefined;
+      return !data?.length ||
+        data.some((item) => item.processingStatus !== "ANALYZED")
+        ? 5000
+        : false;
+    },
   });
 }
 export function useDeadlines(caseId: string) {
@@ -191,10 +288,12 @@ export function useDeadlines(caseId: string) {
   });
 }
 export function useNotifications(unread = false) {
+  const authStatus = useAuthStore((state) => state.status);
   return useQuery({
     queryKey: ["notifications", unread],
     queryFn: () =>
       apiFetch<Notification[]>(`/notifications?unread=${String(unread)}`),
+    enabled: authStatus === "authenticated",
   });
 }
 export function useMe() {
@@ -340,6 +439,18 @@ export async function uploadEvidence(
   });
 }
 
+export async function createTextEvidence(
+  caseId: string,
+  text: string,
+  label = "Case notes",
+  kind: EvidenceKind = "TEXT",
+) {
+  return apiFetch<Evidence>(`/cases/${caseId}/evidence/text`, {
+    method: "POST",
+    body: JSON.stringify({ kind, label, text }),
+  });
+}
+
 export function useCaseActivityStream(caseId: string) {
   const client = useQueryClient();
   const token = useAuthStore((state) => state.accessToken);
@@ -391,8 +502,24 @@ export function useCaseActivityStream(caseId: string) {
             if (eventId) lastEventId = eventId;
             const data = frame.match(/^data:\s*(.+)$/m)?.[1];
             if (data) {
-              void client.invalidateQueries({ queryKey: ["events", caseId] });
-              void client.invalidateQueries({ queryKey: ["case", caseId] });
+              for (const key of [
+                "events",
+                "case",
+                "evidence",
+                "claims",
+                "procedure",
+                "procedure-sources",
+                "timeline",
+                "requirements",
+                "contradictions",
+                "graph",
+                "analysis",
+                "appeals",
+                "responses",
+                "deadlines",
+              ]) {
+                void client.invalidateQueries({ queryKey: [key, caseId] });
+              }
               void client.invalidateQueries({ queryKey: ["notifications"] });
             }
           }

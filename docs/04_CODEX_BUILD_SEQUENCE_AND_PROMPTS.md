@@ -608,7 +608,7 @@ First, re-read AGENTS.md, PRD, technical spec, environment/operations guide, and
 Do the following:
 
 1. Identify every PRD/spec item as IMPLEMENTED, PARTIAL, NOT IMPLEMENTED, or NOT APPLICABLE. Do not hide gaps.
-2. Fix remaining in-scope implementation gaps that are safe and do not require an account/credential I have not provided.
+2. Fix remaining in-scope implementation gaps.
 3. Remove dead demo-only code, stale TODOs, unused dependencies, fake fixtures outside tests, and misleading feature flags.
 4. Run lint, typecheck, all deterministic tests, builds, E2E, and security checks.
 5. If real provider credentials are available and explicitly safe, run the live-provider verification suite. Never perform a consequential external submission just to prove connectivity.

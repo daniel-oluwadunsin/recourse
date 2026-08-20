@@ -5,6 +5,19 @@ export const STORAGE_PROVIDER = Symbol("STORAGE_PROVIDER");
 
 export type StorageResourceType = "raw";
 
+const storageKeyExtensions = [
+  "bin",
+  "docx",
+  "eml",
+  "gif",
+  "jpeg",
+  "jpg",
+  "pdf",
+  "png",
+  "txt",
+  "webp",
+] as const;
+
 export interface UploadIntent {
   uploadUrl: string;
   fields: Record<string, string>;
@@ -72,19 +85,44 @@ export class StorageProviderError extends Error {
   }
 }
 
-export function createOpaqueStorageKey(folder: string): string {
+export function createOpaqueStorageKey(
+  folder: string,
+  extension = "bin",
+): string {
   const id = randomUUID();
-  return `${folder.replace(/^\/+|\/+$/g, "")}/evidence/${id}.bin`;
+  const normalizedExtension = normalizeStorageKeyExtension(extension);
+  return `${folder.replace(/^\/+|\/+$/g, "")}/evidence/${id}.${normalizedExtension}`;
 }
 
 export function assertOpaqueStorageKey(storageKey: string): void {
+  const extension = storageKey.split(".").at(-1)?.toLowerCase() ?? "";
   if (
     storageKey.length > 240 ||
     storageKey.includes("..") ||
     storageKey.includes("\\") ||
     storageKey.startsWith("/") ||
-    !/^[-a-zA-Z0-9_/]+\.bin$/.test(storageKey)
+    !/^[-a-zA-Z0-9_/]+\.[a-z0-9]+$/.test(storageKey) ||
+    !isStorageKeyExtension(extension)
   ) {
     throw new StorageProviderError("Storage key is invalid.", "INVALID_KEY");
   }
+}
+
+function normalizeStorageKeyExtension(value: string): string {
+  const normalized = value.trim().replace(/^\./, "").toLowerCase();
+  if (!isStorageKeyExtension(normalized)) {
+    throw new StorageProviderError(
+      "Storage key extension is invalid.",
+      "INVALID_KEY",
+    );
+  }
+  return normalized;
+}
+
+function isStorageKeyExtension(
+  value: string,
+): value is (typeof storageKeyExtensions)[number] {
+  return storageKeyExtensions.includes(
+    value as (typeof storageKeyExtensions)[number],
+  );
 }

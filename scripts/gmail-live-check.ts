@@ -1,5 +1,3 @@
-import { ConfigService } from "@nestjs/config";
-
 import { parseEnvironment } from "../packages/config/src/index.js";
 import { GmailEmailProvider } from "../apps/api/src/modules/email/gmail.provider";
 
@@ -8,7 +6,17 @@ async function main(): Promise<void> {
   if (environment.EMAIL_PROVIDER !== "gmail") {
     throw new Error("Set EMAIL_PROVIDER=gmail to run the Gmail live check.");
   }
-  const provider = new GmailEmailProvider(new ConfigService(environment));
+  const config = {
+    get: <K extends keyof typeof environment>(key: K) => environment[key],
+    getOrThrow: <K extends keyof typeof environment>(key: K) => {
+      const value = environment[key];
+      if (value === undefined || value === null || value === "") {
+        throw new Error(`${String(key)} is required.`);
+      }
+      return value;
+    },
+  } as ConstructorParameters<typeof GmailEmailProvider>[0];
+  const provider = new GmailEmailProvider(config);
   const [smtp, imap] = await Promise.all([
     provider.verifyConnection(),
     provider.verifyImapConnection(),

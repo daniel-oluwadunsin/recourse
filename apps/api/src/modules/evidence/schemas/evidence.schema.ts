@@ -5,10 +5,12 @@ import {
   evidenceErrorCodeValues,
   evidenceExtractionMethodValues,
   evidenceKindValues,
+  evidenceMalwareScanStatusValues,
   evidenceProcessingStatusValues,
   type EvidenceErrorCode,
   type EvidenceExtractionMethod,
   type EvidenceKind,
+  type EvidenceMalwareScanStatus,
   type EvidenceProcessingStatus,
 } from "@recourse/contracts";
 
@@ -76,6 +78,14 @@ export class Evidence {
 
   @Prop({ default: null, maxlength: 500, type: String })
   processingErrorMessage!: string | null;
+
+  @Prop({
+    default: "PENDING",
+    enum: [...evidenceMalwareScanStatusValues],
+    required: true,
+    type: String,
+  })
+  malwareScanStatus!: EvidenceMalwareScanStatus;
 
   @Prop({ default: null, type: Object })
   extractionMetadata!: Record<string, unknown> | null;

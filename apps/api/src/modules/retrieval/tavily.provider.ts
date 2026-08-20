@@ -1,8 +1,10 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { tavily } from "@tavily/core";
 
 import { type EnvironmentConfig } from "@recourse/config";
+import { ApplicationObservabilityService } from "../../common/observability.service";
+import { dedupeUrls, normalizeUrl } from "./url-normalizer";
 
 import {
   type RetrievalCrawlResponse,
@@ -35,7 +37,11 @@ export class TavilyProvider implements WebRetrievalProvider {
     expiresAt: number;
   } | null = null;
 
-  constructor(private readonly config: ConfigService<EnvironmentConfig>) {}
+  constructor(
+    private readonly config: ConfigService<EnvironmentConfig>,
+    @Optional()
+    private readonly observability?: ApplicationObservabilityService,
+  ) {}
 
   async search(
     request: RetrievalSearchRequest,
@@ -59,6 +65,7 @@ export class TavilyProvider implements WebRetrievalProvider {
         includeUsage: request.includeUsage,
         timeout: request.timeoutSeconds,
       });
+      this.recordOperation("search", "succeeded", response.usage?.credits ?? 0);
       return {
         query: response.query,
         results: response.results.map((result) => ({
@@ -73,7 +80,11 @@ export class TavilyProvider implements WebRetrievalProvider {
         responseTimeSeconds: response.responseTime ?? null,
       };
     } catch (error: unknown) {
-      if (error instanceof WebRetrievalError) throw error;
+      if (error instanceof WebRetrievalError) {
+        this.recordOperation("search", "failed");
+        throw error;
+      }
+      this.recordOperation("search", "failed");
       throw toWebRetrievalError(error, "TAVILY_SEARCH_FAILED");
     }
   }
@@ -81,22 +92,35 @@ export class TavilyProvider implements WebRetrievalProvider {
   async extract(
     request: RetrievalExtractRequest,
   ): Promise<RetrievalExtractResponse> {
-    if (request.urls.length === 0 || request.urls.length > 20) {
+    const urls = dedupeUrls(request.urls);
+    if (
+      request.urls.length === 0 ||
+      request.urls.length > 20 ||
+      urls.length !== request.urls.length
+    ) {
       throw new WebRetrievalError(
-        "Tavily Extract accepts between 1 and 20 URLs.",
-        "EXTRACT_URL_LIMIT",
+        "Tavily Extract received an unsafe or duplicate URL.",
+        "EXTRACT_URL_INVALID",
         false,
       );
     }
     try {
-      const response = await this.clientFor().extract(request.urls, {
-        query: request.query,
-        chunksPerSource: request.chunksPerSource,
-        extractDepth: request.extractDepth,
-        format: "markdown",
-        includeUsage: request.includeUsage,
-        timeout: request.timeoutSeconds,
-      });
+      const response = await this.clientFor().extract(
+        urls.map((item) => item.canonicalUrl),
+        {
+          query: request.query,
+          chunksPerSource: request.chunksPerSource,
+          extractDepth: request.extractDepth,
+          format: "markdown",
+          includeUsage: request.includeUsage,
+          timeout: request.timeoutSeconds,
+        },
+      );
+      this.recordOperation(
+        "extract",
+        "succeeded",
+        response.usage?.credits ?? 0,
+      );
       return {
         results: response.results.map((result) => ({
           url: result.url,
@@ -109,7 +133,11 @@ export class TavilyProvider implements WebRetrievalProvider {
         responseTimeSeconds: response.responseTime ?? null,
       };
     } catch (error: unknown) {
-      if (error instanceof WebRetrievalError) throw error;
+      if (error instanceof WebRetrievalError) {
+        this.recordOperation("extract", "failed");
+        throw error;
+      }
+      this.recordOperation("extract", "failed");
       throw toWebRetrievalError(error, "TAVILY_EXTRACT_FAILED");
     }
   }
@@ -118,8 +146,16 @@ export class TavilyProvider implements WebRetrievalProvider {
     url: string,
     options: Parameters<WebRetrievalProvider["map"]>[1],
   ): Promise<RetrievalMapResponse> {
+    const normalized = normalizeUrl(url);
+    if (!normalized) {
+      throw new WebRetrievalError(
+        "Tavily Map received an unsafe URL.",
+        "MAP_URL_INVALID",
+        false,
+      );
+    }
     try {
-      const response = await this.clientFor().map(url, {
+      const response = await this.clientFor().map(normalized.canonicalUrl, {
         maxDepth: options.maxDepth,
         maxBreadth: options.maxBreadth,
         limit: options.limit,
@@ -127,6 +163,7 @@ export class TavilyProvider implements WebRetrievalProvider {
         includeUsage: options.includeUsage,
         timeout: options.timeoutSeconds,
       });
+      this.recordOperation("map", "succeeded", response.usage?.credits ?? 0);
       return {
         baseUrl: response.baseUrl,
         urls: response.results,
@@ -135,7 +172,11 @@ export class TavilyProvider implements WebRetrievalProvider {
         responseTimeSeconds: response.responseTime ?? null,
       };
     } catch (error: unknown) {
-      if (error instanceof WebRetrievalError) throw error;
+      if (error instanceof WebRetrievalError) {
+        this.recordOperation("map", "failed");
+        throw error;
+      }
+      this.recordOperation("map", "failed");
       throw toWebRetrievalError(error, "TAVILY_MAP_FAILED");
     }
   }
@@ -144,8 +185,16 @@ export class TavilyProvider implements WebRetrievalProvider {
     url: string,
     options: Parameters<WebRetrievalProvider["crawl"]>[1],
   ): Promise<RetrievalCrawlResponse> {
+    const normalized = normalizeUrl(url);
+    if (!normalized) {
+      throw new WebRetrievalError(
+        "Tavily Crawl received an unsafe URL.",
+        "CRAWL_URL_INVALID",
+        false,
+      );
+    }
     try {
-      const response = await this.clientFor().crawl(url, {
+      const response = await this.clientFor().crawl(normalized.canonicalUrl, {
         maxDepth: options.maxDepth,
         maxBreadth: options.maxBreadth,
         limit: options.limit,
@@ -157,6 +206,7 @@ export class TavilyProvider implements WebRetrievalProvider {
         includeUsage: options.includeUsage,
         timeout: options.timeoutSeconds,
       });
+      this.recordOperation("crawl", "succeeded", response.usage?.credits ?? 0);
       return {
         baseUrl: response.baseUrl,
         results: response.results.map((result) => ({
@@ -168,7 +218,11 @@ export class TavilyProvider implements WebRetrievalProvider {
         responseTimeSeconds: response.responseTime ?? null,
       };
     } catch (error: unknown) {
-      if (error instanceof WebRetrievalError) throw error;
+      if (error instanceof WebRetrievalError) {
+        this.recordOperation("crawl", "failed");
+        throw error;
+      }
+      this.recordOperation("crawl", "failed");
       throw toWebRetrievalError(error, "TAVILY_CRAWL_FAILED");
     }
   }
@@ -248,6 +302,28 @@ export class TavilyProvider implements WebRetrievalProvider {
       });
     }
     return this.client;
+  }
+
+  private recordOperation(
+    operation: "search" | "extract" | "map" | "crawl",
+    status: "succeeded" | "failed",
+    credits = 0,
+  ): void {
+    this.observability?.metrics.increment(
+      "recourse_retrieval_operations_total",
+      {
+        operation,
+        provider: "tavily",
+        status,
+      },
+    );
+    if (credits > 0) {
+      this.observability?.metrics.increment(
+        "recourse_retrieval_credits_total",
+        { operation, provider: "tavily" },
+        credits,
+      );
+    }
   }
 }
 

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -11,15 +12,21 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Throttle } from "@nestjs/throttler";
 import { type Request, type Response } from "express";
 
 import { type EnvironmentConfig } from "@recourse/config";
 
 import { getRequestContext } from "@recourse/logger";
 
+import { configuredRateLimit } from "../../common/security/rate-limit";
 import { SignInDto } from "./dto/sign-in.dto";
 import { SignUpDto } from "./dto/sign-up.dto";
+import { DeleteAccountDto } from "./dto/delete-account.dto";
+import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { AuthService } from "./auth.service";
+import { AccountDeletionService } from "./account-deletion.service";
 import { getRefreshCookieName, getRefreshCookieOptions } from "./auth-cookie";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { AccessTokenGuard } from "./guards/access-token.guard";
@@ -30,9 +37,16 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly config: ConfigService<EnvironmentConfig>,
+    private readonly accountDeletion: AccountDeletionService,
   ) {}
 
   @Post("sign-up")
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("AUTH_SIGN_UP_RATE_LIMIT"),
+      ttl: 900000,
+    },
+  })
   async signUp(
     @Body() body: SignUpDto,
     @Req() request: Request,
@@ -51,6 +65,12 @@ export class AuthController {
   }
 
   @Post("sign-in")
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("AUTH_SIGN_IN_RATE_LIMIT"),
+      ttl: 900000,
+    },
+  })
   async signIn(
     @Body() body: SignInDto,
     @Req() request: Request,
@@ -69,6 +89,12 @@ export class AuthController {
   }
 
   @Post("refresh")
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("AUTH_REFRESH_RATE_LIMIT"),
+      ttl: 60000,
+    },
+  })
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -89,7 +115,59 @@ export class AuthController {
     };
   }
 
+  @Post("password-reset/request")
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("AUTH_SIGN_IN_RATE_LIMIT"),
+      ttl: 900000,
+    },
+  })
+  @HttpCode(HttpStatus.ACCEPTED)
+  async requestPasswordReset(
+    @Body() body: RequestPasswordResetDto,
+    @Req() request: Request,
+  ): Promise<{ message: string }> {
+    await this.authService.requestPasswordReset(
+      body.email,
+      this.requestContext(request),
+    );
+    return {
+      message:
+        "If an active account matches that email, a reset link has been sent.",
+    };
+  }
+
+  @Post("password-reset/complete")
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("AUTH_SIGN_IN_RATE_LIMIT"),
+      ttl: 900000,
+    },
+  })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(
+    @Body() body: ResetPasswordDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    await this.authService.resetPassword(
+      body.token,
+      body.password,
+      this.requestContext(request),
+    );
+    response.clearCookie(
+      getRefreshCookieName(this.config),
+      getRefreshCookieOptions(this.config),
+    );
+  }
+
   @Post("logout")
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("AUTH_REFRESH_RATE_LIMIT"),
+      ttl: 60000,
+    },
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
     @Req() request: Request,
@@ -109,6 +187,32 @@ export class AuthController {
   @UseGuards(AccessTokenGuard)
   me(@CurrentUser() authenticatedUser: AuthenticatedUser) {
     return { user: authenticatedUser.user };
+  }
+
+  @Delete("me")
+  @UseGuards(AccessTokenGuard)
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("ACCOUNT_DELETION_RATE_LIMIT"),
+      ttl: 900000,
+    },
+  })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteAccount(
+    @Body() body: DeleteAccountDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    await this.accountDeletion.deleteAccount(
+      currentUser.userId,
+      body.password,
+      this.requestContext(request),
+    );
+    response.clearCookie(
+      getRefreshCookieName(this.config),
+      getRefreshCookieOptions(this.config),
+    );
   }
 
   private readRefreshCookie(request: Request): string | undefined {

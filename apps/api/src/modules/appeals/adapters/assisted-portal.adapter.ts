@@ -9,6 +9,7 @@ import {
   type PreparedAction,
 } from "../appeal.types";
 import { type CaseActionDocument } from "../schemas/case-action.schema";
+import { normalizeUrl } from "../../retrieval/url-normalizer";
 
 @Injectable()
 export class AssistedPortalAdapter implements ActionAdapter {
@@ -79,9 +80,5 @@ function readStringArray(value: unknown): string[] {
 }
 
 function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
+  return normalizeUrl(value)?.canonicalUrl.startsWith("https://") ?? false;
 }

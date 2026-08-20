@@ -20,10 +20,31 @@ test("public landing and auth affordances are available", async ({ page }) => {
 test("auth form validates before calling the backend", async ({ page }) => {
   await page.goto("/auth/sign-in");
   await page.getByRole("textbox", { name: "Email" }).fill("not-an-email");
-  await page.getByLabel("Password").fill("short");
+  await page.getByLabel("Password").fill("");
   await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page.getByText(/valid email address/i)).toBeVisible();
-  await expect(page.getByText(/at least 12 characters/i)).toBeVisible();
+  await expect(page.getByText(/enter your password/i)).toBeVisible();
+});
+
+test("password reset request is enumeration-safe and incomplete links fail closed", async ({
+  page,
+}) => {
+  await page.goto("/auth/forgot-password");
+  await page.getByRole("textbox", { name: "Email" }).fill("not-an-email");
+  await page.getByRole("button", { name: /send reset link/i }).click();
+  await expect(page.getByText(/valid email address/i)).toBeVisible();
+
+  await page
+    .getByRole("textbox", { name: "Email" })
+    .fill("missing-account@invalid.example");
+  await page.getByRole("button", { name: /send reset link/i }).click();
+  await expect(page.getByText(/if an active account matches/i)).toBeVisible();
+
+  await page.goto("/auth/reset-password");
+  await expect(page.getByText(/reset link is incomplete/i)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /change password/i }),
+  ).toBeDisabled();
 });
 
 test.describe("real authenticated case flow", () => {

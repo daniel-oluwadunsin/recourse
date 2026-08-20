@@ -26,6 +26,7 @@ import { Procedure } from "../procedure/schemas/procedure.schema";
 import { ProcedureVersion } from "../procedure/schemas/procedure-version.schema";
 import { ProceduralClaim } from "../procedure/schemas/procedural-claim.schema";
 import { SourceSnapshot } from "../retrieval/schemas/source-snapshot.schema";
+import { isInstitutionPublishedPage } from "../retrieval/authority-ranking.service";
 import { Appeal, type AppealDocument } from "./schemas/appeal.schema";
 import {
   GroundingVerifierService,
@@ -91,6 +92,21 @@ export class AppealComposerService {
       throw new AppealBlockedError(
         "CASE_NOT_READY",
         "The case is not in a state where an appeal may be generated.",
+      );
+    }
+    const unresolvedFacts =
+      context.caseDocument.analysis?.unresolvedFacts ?? [];
+    if (
+      unresolvedFacts.some(
+        (fact) =>
+          typeof fact !== "object" ||
+          fact === null ||
+          fact.resolutionOwner !== "INSTITUTION",
+      )
+    ) {
+      throw new AppealBlockedError(
+        "UNRESOLVED_CASE_FACTS",
+        "Complete the blocking case fact work and re-run analysis before generating an appeal.",
       );
     }
 
@@ -168,10 +184,15 @@ export class AppealComposerService {
         "No supported procedural claims are available for this procedure version.",
       );
     }
+    const selectedProceduralClaims = proceduralClaims.slice(0, 10);
+    const selectedGroundedClaims = selectGroundedClaims(
+      groundedClaims,
+      Math.max(1, 20 - selectedProceduralClaims.length),
+    );
 
     const structured = appealStructuredArgumentsSchema.parse({
       arguments: [
-        ...groundedClaims.map((claim) => ({
+        ...selectedGroundedClaims.map((claim) => ({
           proposition: `The available case record states: ${safeSentence(claim.text)}`,
           requestedOutcome,
           supportingClaimIds: [claim._id.toString()],
@@ -180,7 +201,7 @@ export class AppealComposerService {
             .map((ref) => ref.sourceId),
           supportingProceduralClaimIds: [],
         })),
-        ...proceduralClaims.map((claim) => ({
+        ...selectedProceduralClaims.map((claim) => ({
           proposition: `The verified procedure states: ${safeSentence(claim.humanText)}`,
           requestedOutcome,
           supportingClaimIds: [],
@@ -194,14 +215,16 @@ export class AppealComposerService {
       requestedOutcome,
     });
     const groundingContext = {
-      claims: groundedClaims.map(toGroundingClaim),
+      claims: selectedGroundedClaims.map(toGroundingClaim),
       evidenceIds: new Set(
         blocks
           .filter((block) => activeEvidenceIds.has(block.evidenceId.toString()))
           .map((block) => block._id.toString()),
       ),
       procedureVersionId: context.version._id.toString(),
-      proceduralClaims: proceduralClaims.map(toGroundingProceduralClaim),
+      proceduralClaims: selectedProceduralClaims.map(
+        toGroundingProceduralClaim,
+      ),
     };
     const grounding = this.grounding.verify(structured, groundingContext);
     if (grounding.unsupportedAssertionCount > 0) {
@@ -351,13 +374,22 @@ export class AppealComposerService {
       .find({ _id: { $in: version.sourceSnapshotIds } })
       .sort({ authorityTier: 1, retrievedAt: -1 })
       .exec();
-    const official = sources.find((source) =>
-      [
-        "TIER_1_OFFICIAL_INSTITUTION",
-        "TIER_1_OFFICIAL_GOVERNMENT",
-        "TIER_1_REGULATOR_ADR",
-      ].includes(source.authorityTier),
-    );
+    const official = sources
+      .filter(
+        (source) =>
+          [
+            "TIER_1_OFFICIAL_INSTITUTION",
+            "TIER_1_OFFICIAL_GOVERNMENT",
+            "TIER_1_REGULATOR_ADR",
+          ].includes(source.authorityTier) &&
+          isInstitutionPublishedPage(source.canonicalUrl),
+      )
+      .sort(
+        (left, right) =>
+          submissionDestinationScore(right) -
+            submissionDestinationScore(left) ||
+          left.canonicalUrl.localeCompare(right.canonicalUrl),
+      )[0];
     const instructions = version.steps
       .map((step) => readObjectText(step, "description"))
       .filter((value): value is string => Boolean(value));
@@ -445,6 +477,95 @@ function outcomeText(value: AppealRequestedOutcome): string {
   return value.toLowerCase().replaceAll("_", " ");
 }
 
+type SelectableGroundedClaim = {
+  _id: Types.ObjectId;
+  confidence: number;
+  normalizedText: string;
+  sourceRefs: Array<{ sourceType: string; sourceId: string }>;
+  text: string;
+};
+
+/**
+ * Keep the appeal contract bounded while favouring strong, non-repetitive facts.
+ * Extraction can legitimately produce more claims than a single appeal should
+ * enumerate, especially when several evidence blocks restate the same event.
+ */
+export function selectGroundedClaims<T extends SelectableGroundedClaim>(
+  claims: T[],
+  limit: number,
+): T[] {
+  if (limit <= 0) return [];
+
+  const ranked = [...claims].sort(
+    (left, right) =>
+      right.confidence - left.confidence ||
+      left.text.length - right.text.length ||
+      left._id.toString().localeCompare(right._id.toString()),
+  );
+  const selected: T[] = [];
+  const selectedTokens: Set<string>[] = [];
+  const seenNormalized = new Set<string>();
+
+  for (const claim of ranked) {
+    const normalized = normalizeForSelection(
+      claim.normalizedText || claim.text,
+    );
+    if (!normalized || seenNormalized.has(normalized)) continue;
+
+    const tokens = new Set(normalized.split(" ").filter(Boolean));
+    const substantiallyDuplicates = selectedTokens.some(
+      (existing) => tokenSimilarity(tokens, existing) >= 0.82,
+    );
+    if (substantiallyDuplicates) continue;
+
+    selected.push(claim);
+    selectedTokens.push(tokens);
+    seenNormalized.add(normalized);
+    if (selected.length === limit) break;
+  }
+
+  // Similar claims can still be materially distinct. Fill any remaining slots
+  // from the deterministic ranking after exact duplicates have been removed.
+  if (selected.length < limit) {
+    const selectedIds = new Set(selected.map((claim) => claim._id.toString()));
+    for (const claim of ranked) {
+      const normalized = normalizeForSelection(
+        claim.normalizedText || claim.text,
+      );
+      if (
+        !normalized ||
+        seenNormalized.has(normalized) ||
+        selectedIds.has(claim._id.toString())
+      ) {
+        continue;
+      }
+      selected.push(claim);
+      selectedIds.add(claim._id.toString());
+      seenNormalized.add(normalized);
+      if (selected.length === limit) break;
+    }
+  }
+
+  return selected;
+}
+
+function normalizeForSelection(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-US")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function tokenSimilarity(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  for (const token of left) {
+    if (right.has(token)) intersection += 1;
+  }
+  return intersection / Math.min(left.size, right.size);
+}
+
 export function isProcedureFresh(
   procedure: import("../procedure/schemas/procedure.schema").ProcedureDocument,
   config: ConfigService<EnvironmentConfig>,
@@ -464,4 +585,24 @@ function readObjectText(
 ): string | null {
   const text = value[key];
   return typeof text === "string" && text.trim() ? text.trim() : null;
+}
+
+function submissionDestinationScore(source: {
+  canonicalUrl: string;
+  paragraphs: Array<{ text: string }>;
+}): number {
+  const url = source.canonicalUrl.toLowerCase();
+  const text = source.paragraphs
+    .slice(0, 20)
+    .map((paragraph) => paragraph.text)
+    .join(" ")
+    .toLowerCase();
+  let score = 0;
+  if (/\/(?:answer|contact|appeal)(?:\/|\?|$)/u.test(url)) score += 30;
+  if (/\b(?:submit|start) (?:an? )?appeal\b/u.test(text)) score += 20;
+  if (/\bofficial (?:appeal )?form\b/u.test(text)) score += 15;
+  if (/\bappeal\b/u.test(url)) score += 10;
+  if (/\bappeal\b/u.test(text)) score += 5;
+  if (/\b(?:policy|policies)\b/u.test(url)) score -= 5;
+  return score;
 }

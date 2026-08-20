@@ -98,6 +98,22 @@ class TestStorageProvider implements StorageProvider {
     this.objects.delete(storageKey);
   }
 
+  async uploadObject(input: {
+    storageKey: string;
+    bytes: Buffer;
+    contentType: string;
+  }): Promise<StoredObjectMetadata> {
+    this.objects.set(input.storageKey, input.bytes);
+    return {
+      assetId: `test-asset-${input.storageKey}`,
+      byteSize: input.bytes.length,
+      contentType: input.contentType,
+      resourceType: "raw",
+      storageKey: input.storageKey,
+      version: "1",
+    };
+  }
+
   async healthCheck(): Promise<StorageHealth> {
     return { provider: "cloudinary", status: "ok" };
   }
@@ -205,6 +221,73 @@ describe("evidence upload ownership and lifecycle", () => {
       .send({ evidenceId: duplicateIntent.body.evidenceId })
       .expect(409);
     expect(storage.objects.has(storage.lastKey as string)).toBe(false);
+  });
+
+  it("persists pasted text as ready, provenance-backed evidence", async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/api/v1/cases/${caseId}/evidence/text`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({
+        kind: "DECISION_NOTICE",
+        label: "Decision notes",
+        text: "The notice says access ended.",
+      })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      extractionMethod: "PLAIN_TEXT",
+      kind: "DECISION_NOTICE",
+      label: "Decision notes",
+      processingStatus: "READY",
+    });
+    const blocks = await request(app.getHttpServer())
+      .get(`/api/v1/cases/${caseId}/evidence/${created.body.id}/blocks`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .expect(200);
+    expect(blocks.body[0]).toMatchObject({
+      blockType: "TEXT",
+      provenance: { status: "USER_ASSERTED" },
+      text: "The notice says access ended.",
+    });
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/cases/${caseId}/evidence/text`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ text: "The notice says access ended." })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post(`/api/v1/cases/${caseId}/evidence/text`)
+      .set("Authorization", `Bearer ${ownerBToken}`)
+      .send({ text: "Owner B must not attach to this case." })
+      .expect(404);
+  });
+
+  it("persists the disabled scanner result when file processing completes", async () => {
+    const body = Buffer.from("A distinct plain-text decision notice.", "utf8");
+    const intent = await uploadIntent({
+      byteSize: body.length,
+      filename: "scanner-disabled.txt",
+      mimeType: "text/plain",
+    }).expect(201);
+    storage.seedLast(body);
+    const complete = await request(app.getHttpServer())
+      .post(`/api/v1/cases/${caseId}/evidence/complete`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ evidenceId: intent.body.evidenceId })
+      .expect(201);
+
+    const processed = await app
+      .get(EvidenceService)
+      .process(
+        intent.body.evidenceId as string,
+        complete.body.revision as number,
+        { actorId: null, actorType: "SYSTEM" },
+      );
+
+    expect(processed).toMatchObject({
+      malwareScanStatus: "SKIPPED",
+      processingStatus: "READY",
+    });
   });
 
   it("tombstones evidence, makes repeated deletion idempotent, and rejects late processing", async () => {

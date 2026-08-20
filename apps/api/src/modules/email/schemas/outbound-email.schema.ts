@@ -9,7 +9,7 @@ export class OutboundEmail {
   @Prop({ default: null, ref: "User", type: SchemaTypes.ObjectId })
   ownerId!: Types.ObjectId | null;
 
-  @Prop({ required: true, type: String, unique: true })
+  @Prop({ required: true, type: String })
   idempotencyKey!: string;
 
   @Prop({ required: true, type: String })

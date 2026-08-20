@@ -1,12 +1,6 @@
 import Link from "next/link";
 import { Logo } from "../components/logo";
-import {
-  ArrowRight,
-  Check,
-  DocumentText,
-  Global,
-  ShieldTick,
-} from "../components/icons";
+import { Check, DocumentText, Global, ShieldTick } from "../components/icons";
 import { LinkButton } from "../components/ui";
 
 export default function Home() {
@@ -26,10 +20,7 @@ export default function Home() {
       </nav>
       <section className="hero-grid">
         <div>
-          <p className="eyebrow">
-            Grounded recourse for consequential decisions
-          </p>
-          <h1 className="mt-5 max-w-3xl text-[clamp(3.8rem,9vw,8rem)] font-bold leading-[.86] tracking-[-.09em]">
+          <h1 className="mt-5 max-w-3xl text-[clamp(3rem,5vw,4.75rem)] font-bold leading-[.94] tracking-[-.04em]">
             Know what is <span className="text-red">known.</span>
             <br />
             Act on what is <span className="text-blue">verified.</span>
@@ -40,9 +31,7 @@ export default function Home() {
             human-approved next actions in one workspace.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <LinkButton href="/auth/sign-up">
-              Open a case <ArrowRight size={17} />
-            </LinkButton>
+            <LinkButton href="/auth/sign-up">Open a case</LinkButton>
             <Link
               href="/auth/sign-in"
               className="inline-flex items-center rounded-xl border-2 border-pencil px-4 py-2 text-sm font-semibold"

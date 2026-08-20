@@ -1,11 +1,5 @@
 import { Transform } from "class-transformer";
-import {
-  IsEmail,
-  IsNotEmpty,
-  IsString,
-  MaxLength,
-  MinLength,
-} from "class-validator";
+import { IsEmail, IsNotEmpty, IsString, MinLength } from "class-validator";
 
 export class SignUpDto {
   @Transform(({ value }) =>
@@ -16,7 +10,6 @@ export class SignUpDto {
 
   @IsNotEmpty()
   @IsString()
-  @MaxLength(128)
   @MinLength(12)
   password!: string;
 }

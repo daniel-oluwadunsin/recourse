@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { Inject, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 import { type EnvironmentConfig } from "@recourse/config";
@@ -13,6 +15,7 @@ import {
 } from "../audit/schemas/audit-log.schema";
 import { AuditLogService } from "../audit/audit.service";
 import { UsersService } from "../users/users.service";
+import { EmailService } from "../email/email.service";
 import { AuthTokenType } from "./schemas/auth-token.schema";
 import {
   AuthTokenService,
@@ -33,6 +36,8 @@ export class AuthService {
     private readonly passwordService: PasswordService,
     private readonly tokenService: AuthTokenService,
     private readonly usersService: UsersService,
+    @Inject(forwardRef(() => EmailService))
+    private readonly emailService: EmailService,
   ) {}
 
   async signUp(
@@ -203,6 +208,93 @@ export class AuthService {
     );
   }
 
+  async requestPasswordReset(
+    email: string,
+    context: AuthRequestContext,
+  ): Promise<void> {
+    const startedAt = Date.now();
+    const user = await this.usersService.findActiveByEmail(
+      normalizeEmail(email),
+    );
+    if (!user) {
+      await this.auditLogService.record(
+        AuditEventType.AUTH_PASSWORD_RESET_REQUESTED,
+        context,
+        AuditOutcome.SUCCESS,
+        { accountMatched: false },
+      );
+      await normalizePasswordResetResponseTime(startedAt);
+      return;
+    }
+
+    const userId = user._id.toString();
+    const token = await this.issuePasswordResetToken(userId);
+    const url = new URL("/auth/reset-password", this.config.get("WEB_URL"));
+    url.hash = new URLSearchParams({ token }).toString();
+    try {
+      await this.emailService.sendSecurityEmail({
+        idempotencyKey: `password-reset-${userId}-${Date.now()}`,
+        subject: "Reset your Recourse password",
+        text: [
+          "A password reset was requested for your Recourse account.",
+          "",
+          `Reset your password: ${url.toString()}`,
+          "",
+          `This link expires in ${this.config.get("PASSWORD_RESET_TOKEN_TTL_MINUTES") ?? 30} minutes and can be used once.`,
+          "If you did not request this, you can ignore this email.",
+        ].join("\n"),
+        to: user.email,
+        userId,
+      });
+      await this.auditLogService.record(
+        AuditEventType.AUTH_PASSWORD_RESET_REQUESTED,
+        { ...context, userId },
+        AuditOutcome.SUCCESS,
+        { accountMatched: true, deliveryAccepted: true },
+      );
+    } catch {
+      await this.auditLogService.record(
+        AuditEventType.AUTH_PASSWORD_RESET_REQUESTED,
+        { ...context, userId },
+        AuditOutcome.FAILURE,
+        { accountMatched: true, deliveryAccepted: false },
+        "PASSWORD_RESET_DELIVERY_FAILED",
+      );
+    }
+    await normalizePasswordResetResponseTime(startedAt);
+  }
+
+  async resetPassword(
+    token: string,
+    password: string,
+    context: AuthRequestContext,
+  ): Promise<void> {
+    const passwordHash = await this.passwordService.hash(password);
+    const userId = await this.tokenService.consumeOneTimeToken(
+      token,
+      AuthTokenType.PASSWORD_RESET,
+    );
+    if (
+      !userId ||
+      !(await this.usersService.updatePasswordHash(userId, passwordHash))
+    ) {
+      await this.auditLogService.record(
+        AuditEventType.AUTH_PASSWORD_RESET_FAILED,
+        context,
+        AuditOutcome.FAILURE,
+        {},
+        "INVALID_OR_EXPIRED_PASSWORD_RESET_TOKEN",
+      );
+      throw new BadRequestException("Reset link is invalid or expired.");
+    }
+    await this.tokenService.revokeAllForUser(userId, "PASSWORD_RESET");
+    await this.auditLogService.record(
+      AuditEventType.AUTH_PASSWORD_RESET_COMPLETED,
+      { ...context, userId },
+      AuditOutcome.SUCCESS,
+    );
+  }
+
   private async issueSession(
     user: Awaited<ReturnType<UsersService["create"]>>,
   ): Promise<AuthSession> {
@@ -217,6 +309,13 @@ export class AuthService {
       refreshToken,
       user: this.usersService.toPublicUser(user),
     };
+  }
+}
+
+async function normalizePasswordResetResponseTime(startedAt: number) {
+  const remainingMs = 1200 - (Date.now() - startedAt);
+  if (remainingMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remainingMs));
   }
 }
 

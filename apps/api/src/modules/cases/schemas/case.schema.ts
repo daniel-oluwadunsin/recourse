@@ -27,12 +27,25 @@ export interface ReadinessSnapshot {
 
 export interface CaseAnalysisSnapshot {
   centralIssues: string[];
-  unresolvedFacts: string[];
+  unresolvedFacts: Array<{
+    fact: string;
+    resolutionOwner: "USER" | "RECOURSE" | "INSTITUTION";
+    resolutionAction: string;
+    userQuestion: string | null;
+    blocking: boolean;
+    inputRefs: string[];
+  }>;
   recommendedNextSteps: string[];
   supportedClaimIds: string[];
   needsHumanReview: boolean;
   modelRunId: string | null;
   computedAt: Date;
+  factAnswers: Array<{
+    question: string;
+    answer: string;
+    answeredAt: Date;
+    evidenceId: string;
+  }>;
 }
 
 @Schema({ collection: "cases", timestamps: true })

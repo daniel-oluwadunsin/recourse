@@ -82,6 +82,7 @@ export interface Decision {
 
 export interface Readiness {
   score: number | null;
+  caps: string[];
   factors: Array<{
     key: string;
     status: "SATISFIED" | "MISSING" | "UNCERTAIN" | "CONFLICTED";
@@ -90,6 +91,31 @@ export interface Readiness {
   }>;
   version?: string;
   computedAt?: string | null;
+}
+
+export interface UnresolvedFact {
+  fact: string;
+  resolutionOwner: "USER" | "RECOURSE" | "INSTITUTION";
+  resolutionAction: string;
+  userQuestion: string | null;
+  blocking: boolean;
+  inputRefs: string[];
+}
+
+export interface CaseAnalysis {
+  centralIssues: string[];
+  unresolvedFacts: UnresolvedFact[];
+  recommendedNextSteps: string[];
+  supportedClaimIds: string[];
+  needsHumanReview: boolean;
+  modelRunId: string | null;
+  computedAt: string;
+  factAnswers?: Array<{
+    question: string;
+    answer: string;
+    answeredAt: string;
+    evidenceId: string;
+  }>;
 }
 
 export interface CaseRecord {
@@ -355,7 +381,7 @@ export interface CaseAction {
   verificationStatus: string;
   requiresApproval: boolean;
   idempotencyKey: string;
-  recommendation: Record<string, unknown>;
+  recommendation: ActionRecommendation;
   preparedPayload: Record<string, unknown> | null;
   adapterName: string | null;
   externalReference: string | null;
@@ -364,6 +390,22 @@ export interface CaseAction {
   approvedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ActionRecommendation {
+  actionType: string;
+  available: boolean;
+  canExecute: boolean;
+  capability: string;
+  gates: string[];
+  instructions: string[];
+  officialDestination: string | null;
+  reason: string;
+  requiresApproval: boolean;
+  supportingClaimIds: string[];
+  supportingEvidenceIds: string[];
+  supportingProceduralClaimIds: string[];
+  supportingSourceSnapshotIds: string[];
 }
 
 export interface CaseResponse {

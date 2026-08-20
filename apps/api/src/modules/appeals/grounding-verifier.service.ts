@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 
 import {
   type AppealStructuredArguments,
@@ -7,6 +7,7 @@ import {
 } from "@recourse/contracts";
 
 import { type GroundedSentence, type GroundingResult } from "./appeal.types";
+import { ApplicationObservabilityService } from "../../common/observability.service";
 
 export interface GroundingClaim {
   id: string;
@@ -37,6 +38,11 @@ const verifiedEvidenceStatuses = new Set<ClaimEvidenceStatus>([
 
 @Injectable()
 export class GroundingVerifierService {
+  constructor(
+    @Optional()
+    private readonly observability?: ApplicationObservabilityService,
+  ) {}
+
   verify(
     structured: AppealStructuredArguments,
     context: GroundingContext,
@@ -159,7 +165,7 @@ export class GroundingVerifierService {
         }),
     );
 
-    return {
+    const result = {
       factualGroundingCoverage: ratio(
         factual.length - unsupportedFacts.length,
         factual.length,
@@ -172,6 +178,18 @@ export class GroundingVerifierService {
         unsupportedFacts.length + unsupportedProcedure.length,
       sentences,
     };
+    this.observability?.metrics.increment("recourse_grounding_checks_total", {
+      status: result.unsupportedAssertionCount === 0 ? "grounded" : "blocked",
+    });
+    this.observability?.metrics.observe(
+      "recourse_factual_grounding_coverage",
+      result.factualGroundingCoverage,
+    );
+    this.observability?.metrics.observe(
+      "recourse_procedural_grounding_coverage",
+      result.proceduralGroundingCoverage,
+    );
+    return result;
   }
 }
 

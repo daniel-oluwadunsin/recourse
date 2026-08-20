@@ -18,12 +18,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const setSession = useAuthStore((state) => state.setSession);
   const setStatus = useAuthStore((state) => state.setStatus);
   const pathname = usePathname();
+  const publicRoute = pathname === "/" || pathname.startsWith("/auth");
 
   useEffect(() => {
     let active = true;
-    const publicRoute = pathname === "/" || pathname.startsWith("/auth");
     if (publicRoute) {
       setStatus("unauthenticated");
+      return () => {
+        active = false;
+      };
+    }
+    if (useAuthStore.getState().status === "authenticated") {
       return () => {
         active = false;
       };
@@ -39,7 +44,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [pathname, setSession, setStatus]);
+  }, [publicRoute, setSession, setStatus]);
 
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

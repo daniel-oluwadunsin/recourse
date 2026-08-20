@@ -20,6 +20,9 @@ export class SourceParagraph {
   text!: string;
 }
 
+export const SourceParagraphSchema =
+  SchemaFactory.createForClass(SourceParagraph);
+
 @Schema({
   collection: "source_snapshots",
   timestamps: { createdAt: true, updatedAt: false },
@@ -61,7 +64,7 @@ export class SourceSnapshot {
   @Prop({ required: true, ref: "RetrievalRun", type: SchemaTypes.ObjectId })
   retrievalRunId!: Types.ObjectId;
 
-  @Prop({ required: true, type: [SourceParagraph] })
+  @Prop({ required: true, type: [SourceParagraphSchema] })
   paragraphs!: SourceParagraph[];
 
   @Prop({ enum: [...sourceSnapshotStatusValues], required: true, type: String })

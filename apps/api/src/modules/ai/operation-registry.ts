@@ -27,7 +27,7 @@ import { extractTimelineEventsPrompt } from "./prompts/extract-timeline-events.v
 import { extractProcedurePrompt } from "./prompts/extract-procedure.v1";
 import { verifyProceduralClaimPrompt } from "./prompts/verify-procedural-claim.v1";
 import { detectClaimConflictsPrompt } from "./prompts/detect-claim-conflicts.v1";
-import { analyzeCasePrompt } from "./prompts/analyze-case.v1";
+import { analyzeCasePrompt } from "./prompts/analyze-case.v2";
 import { analyzeResponsePrompt } from "./prompts/analyze-response.v1";
 import { replanCasePrompt } from "./prompts/replan-case.v1";
 
@@ -88,7 +88,7 @@ export const aiOperationRegistry = {
     schemaName: "extract_procedure_v1",
     inputSchema: extractProcedureInputSchema,
     outputSchema: extractProcedureOutputSchema,
-    maxCompletionTokens: 6000,
+    maxCompletionTokens: 4_000,
     buildPromptInput: (input) => JSON.stringify(input),
   },
   "verify-procedural-claim": {

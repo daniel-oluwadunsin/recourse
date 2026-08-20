@@ -1,11 +1,19 @@
-import { ConfigService } from "@nestjs/config";
-
 import { parseEnvironment } from "../packages/config/src/index.js";
 import { VoyageEmbeddingProvider } from "../apps/api/src/modules/embeddings/voyage.provider.js";
 
 async function main(): Promise<void> {
   const environment = parseEnvironment(process.env);
-  const provider = new VoyageEmbeddingProvider(new ConfigService(environment));
+  const config = {
+    get: <K extends keyof typeof environment>(key: K) => environment[key],
+    getOrThrow: <K extends keyof typeof environment>(key: K) => {
+      const value = environment[key];
+      if (value === undefined || value === null) {
+        throw new Error(`${String(key)} is not configured.`);
+      }
+      return value;
+    },
+  } as ConstructorParameters<typeof VoyageEmbeddingProvider>[0];
+  const provider = new VoyageEmbeddingProvider(config);
   const health = await provider.healthCheck();
   if (!health.configured)
     throw new Error("EMBEDDING_API_KEY is not configured.");

@@ -26,6 +26,7 @@ import { hashInput } from "../ai/ai-operation.service";
 import { type ClassifyCaseInput } from "../ai/operation-schemas";
 import { CaseResponse } from "../email/schemas/case-response.schema";
 import { DeadlineService } from "../email/deadline.service";
+import { EmailInboundService } from "../email/email-inbound.service";
 
 @Injectable()
 export class CaseOrchestratorService {
@@ -48,6 +49,9 @@ export class CaseOrchestratorService {
     @Optional()
     @Inject(forwardRef(() => DeadlineService))
     private readonly deadlineService?: DeadlineService,
+    @Optional()
+    @Inject(forwardRef(() => EmailInboundService))
+    private readonly emailInboundService?: EmailInboundService,
   ) {}
 
   async handleCaseEvent(payload: CaseEventJobPayload): Promise<{
@@ -180,47 +184,36 @@ export class CaseOrchestratorService {
     }
 
     if (event.type === "EVIDENCE_PROCESSED") {
-      const activeCase = await this.caseModel
-        .findOne({ _id: event.caseId, deletedAt: null })
-        .exec();
-      if (activeCase?.status === "EVIDENCE_COLLECTION") {
-        const transition = await this.stateMachine.transition(
-          activeCase._id.toString(),
-          "CASE_ANALYSIS",
-          {
-            actorId: null,
-            actorType: "SYSTEM",
-            correlationId: event.correlationId ?? undefined,
-          },
-          {
-            eventType: "CASE_STATUS_CHANGED",
-            expectedCurrent: ["EVIDENCE_COLLECTION"],
-            expectedRevision: activeCase.revision,
-            idempotencyKey: `case-analysis-start-${activeCase._id.toString()}-${activeCase.revision}`,
-            payload: {
-              triggerEventId: event._id.toString(),
-              to: "CASE_ANALYSIS",
-            },
-          },
-        );
-        const inputHash = hashInput({
-          caseId: transition.case._id.toString(),
-          revision: transition.case.revision,
-        });
-        await this.queueProducer.enqueueAIOperation({
-          caseId: transition.case._id.toString(),
-          correlationId: event.correlationId,
-          evidenceId: null,
-          expectedRevision: transition.case.revision,
-          idempotencyKey: `analyze-case-${transition.case._id.toString()}-${transition.case.revision}-${inputHash}`,
-          inputHash,
-          operation: "analyze-case",
-          workflowVersion: WORKFLOW_VERSION,
-        });
-        scheduled.push(
-          `ai-operations:analyze-case:${activeCase._id.toString()}`,
-        );
+      const evidenceId = readPayloadString(event, "evidenceId");
+      if (evidenceId && this.emailInboundService) {
+        const evidence = await this.evidenceModel
+          .findOne({
+            _id: new Types.ObjectId(evidenceId),
+            caseId: event.caseId,
+            deletedAt: null,
+          })
+          .select({ kind: 1 })
+          .exec();
+        if (evidence?.kind === "INSTITUTION_RESPONSE") {
+          const ingested =
+            await this.emailInboundService.ingestUploadedResponse(
+              event.caseId.toString(),
+              evidenceId,
+              event.correlationId,
+            );
+          if (ingested.responseId) {
+            scheduled.push(`response-analysis:${ingested.responseId}`);
+          }
+        }
       }
+      await this.scheduleCaseAnalysisIfReady(event, scheduled);
+    }
+
+    // Evidence can finish before procedure retrieval. Re-check durable ready
+    // evidence when the case enters collection so that event ordering cannot
+    // strand an otherwise analyzable case.
+    if (event.type === "PROCEDURE_RESOLVED") {
+      await this.scheduleCaseAnalysisIfReady(event, scheduled);
     }
 
     if (event.type === "RESPONSE_RECEIVED") {
@@ -369,6 +362,56 @@ export class CaseOrchestratorService {
     await this.workflowDispatch.markCompleted(payload.dispatchId);
 
     return { eventType: event.type, scheduled };
+  }
+
+  private async scheduleCaseAnalysisIfReady(
+    event: CaseEventDocument,
+    scheduled: string[],
+  ): Promise<void> {
+    const [activeCase, readyEvidence] = await Promise.all([
+      this.caseModel.findOne({ _id: event.caseId, deletedAt: null }).exec(),
+      this.evidenceModel.exists({
+        caseId: event.caseId,
+        deletedAt: null,
+        processingStatus: "READY",
+      }),
+    ]);
+    if (activeCase?.status !== "EVIDENCE_COLLECTION" || !readyEvidence) return;
+
+    const transition = await this.stateMachine.transition(
+      activeCase._id.toString(),
+      "CASE_ANALYSIS",
+      {
+        actorId: null,
+        actorType: "SYSTEM",
+        correlationId: event.correlationId ?? undefined,
+      },
+      {
+        eventType: "CASE_STATUS_CHANGED",
+        expectedCurrent: ["EVIDENCE_COLLECTION"],
+        expectedRevision: activeCase.revision,
+        idempotencyKey: `case-analysis-start-${activeCase._id.toString()}-${activeCase.revision}`,
+        payload: {
+          triggerEventId: event._id.toString(),
+          to: "CASE_ANALYSIS",
+        },
+      },
+    );
+    const inputHash = hashInput({
+      caseId: transition.case._id.toString(),
+      revision: transition.case.revision,
+    });
+    await this.queueProducer.enqueueAIOperation({
+      caseId: transition.case._id.toString(),
+      correlationId: event.correlationId,
+      evidenceId: null,
+      expectedRevision: transition.case.revision,
+      idempotencyKey: `analyze-case-${transition.case._id.toString()}-${transition.case.revision}-${inputHash}`,
+      inputHash,
+      operation: "analyze-case",
+      workflowVersion: WORKFLOW_VERSION,
+    });
+    scheduled.push(`ai-operations:analyze-case:${activeCase._id.toString()}`);
   }
 
   private async scheduleClassification(

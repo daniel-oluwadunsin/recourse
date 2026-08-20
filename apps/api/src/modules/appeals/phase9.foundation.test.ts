@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Types } from "mongoose";
 
 import { ActionPolicyEngine } from "./action-policy.service";
 import {
@@ -6,7 +7,10 @@ import {
   isIdempotentExecutionStatus,
 } from "./action.service";
 import { AssistedPortalAdapter } from "./adapters/assisted-portal.adapter";
-import { isProcedureFresh } from "./appeal-composer.service";
+import {
+  isProcedureFresh,
+  selectGroundedClaims,
+} from "./appeal-composer.service";
 import { GroundingVerifierService } from "./grounding-verifier.service";
 
 describe("Phase 9 grounding and action safety", () => {
@@ -149,5 +153,39 @@ describe("Phase 9 grounding and action safety", () => {
 
     expect(result.verified).toBe(false);
     expect(result.providerReference).toBeNull();
+  });
+
+  it("bounds appeal facts and removes repeated extraction variants", () => {
+    const claims = [
+      {
+        _id: new Types.ObjectId("000000000000000000000001"),
+        confidence: 0.99,
+        normalizedText: "the channel was suspended on august 18 2026",
+        sourceRefs: [],
+        text: "The channel was suspended on August 18, 2026.",
+      },
+      {
+        _id: new Types.ObjectId("000000000000000000000002"),
+        confidence: 0.95,
+        normalizedText: "channel was suspended on august 18 2026",
+        sourceRefs: [],
+        text: "Channel was suspended on August 18, 2026.",
+      },
+      {
+        _id: new Types.ObjectId("000000000000000000000003"),
+        confidence: 0.9,
+        normalizedText: "the notice alleged repeated policy violations",
+        sourceRefs: [],
+        text: "The notice alleged repeated policy violations.",
+      },
+    ];
+
+    const selected = selectGroundedClaims(claims, 2);
+
+    expect(selected).toHaveLength(2);
+    expect(selected.map((claim) => claim._id.toString())).toEqual([
+      "000000000000000000000001",
+      "000000000000000000000003",
+    ]);
   });
 });

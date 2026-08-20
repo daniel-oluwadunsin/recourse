@@ -92,6 +92,8 @@ describe("case domain and deterministic workflow", () => {
       amount: "125.50",
       currency: "USD",
     });
+    expect(response.body.relationship).toBe("SELLER");
+    expect(response.body.decisionType).toBe("SUSPENSION");
     expect(response.body.decision.rawExtractedFields.decisionType).toBe(
       "SUSPENSION",
     );

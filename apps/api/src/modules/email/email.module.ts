@@ -8,6 +8,11 @@ import { CasesModule } from "../cases/cases.module";
 import { Case, CaseSchema } from "../cases/schemas/case.schema";
 import { Deadline, DeadlineSchema } from "../cases/schemas/deadline.schema";
 import { EvidenceModule } from "../evidence/evidence.module";
+import { Evidence, EvidenceSchema } from "../evidence/schemas/evidence.schema";
+import {
+  EvidenceBlock,
+  EvidenceBlockSchema,
+} from "../evidence/schemas/evidence-block.schema";
 import {
   ProcedureVersion,
   ProcedureVersionSchema,
@@ -68,12 +73,14 @@ import {
   imports: [
     ConfigModule,
     AuditModule,
-    AuthModule,
+    forwardRef(() => AuthModule),
     forwardRef(() => CasesModule),
     forwardRef(() => EvidenceModule),
     forwardRef(() => QueuesModule),
     MongooseModule.forFeature([
       { name: Case.name, schema: CaseSchema },
+      { name: Evidence.name, schema: EvidenceSchema },
+      { name: EvidenceBlock.name, schema: EvidenceBlockSchema },
       { name: CaseEmailToken.name, schema: CaseEmailTokenSchema },
       { name: CaseResponse.name, schema: CaseResponseSchema },
       { name: Deadline.name, schema: DeadlineSchema },

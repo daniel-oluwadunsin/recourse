@@ -47,6 +47,8 @@ describe("Phase 10 email and response safety boundaries", () => {
       undefined as never,
       inboundModel as never,
       undefined as never,
+      undefined as never,
+      undefined as never,
       provider,
       undefined as never,
       undefined as never,
@@ -77,6 +79,8 @@ describe("Phase 10 email and response safety boundaries", () => {
       undefined as never,
       undefined as never,
       undefined as never,
+      undefined as never,
+      undefined as never,
       provider,
       undefined as never,
       undefined as never,
@@ -103,6 +107,8 @@ describe("Phase 10 email and response safety boundaries", () => {
       } as never,
       undefined as never,
       undefined as never,
+      undefined as never,
+      undefined as never,
       { resolve: vi.fn().mockResolvedValue(null) } as never,
       undefined as never,
       undefined as never,
@@ -122,6 +128,71 @@ describe("Phase 10 email and response safety boundaries", () => {
     expect(result).toEqual({ accepted: false, responseId: null });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ associationStatus: "UNRELATED" }),
+    );
+  });
+
+  it("turns ready institution-response evidence into one auditable response event", async () => {
+    const caseId = new Types.ObjectId();
+    const evidenceId = new Types.ObjectId();
+    const ownerId = new Types.ObjectId();
+    const responseId = new Types.ObjectId();
+    const responseModel = {
+      create: vi.fn().mockResolvedValue([{ _id: responseId }]),
+      findOne: vi.fn(() => ({ exec: vi.fn().mockResolvedValue(null) })),
+    };
+    const events = { appendInSession: vi.fn().mockResolvedValue(undefined) };
+    const service = new EmailInboundService(
+      {
+        transaction: vi.fn((callback) => callback({})),
+      } as never,
+      responseModel as never,
+      undefined as never,
+      undefined as never,
+      {
+        findOne: vi.fn(() => ({
+          exec: vi.fn().mockResolvedValue({
+            _id: evidenceId,
+            caseId,
+            createdAt: new Date("2026-08-20T10:00:00.000Z"),
+            kind: "INSTITUTION_RESPONSE",
+            label: "Institution reply",
+            originalFilename: "reply.txt",
+            ownerId,
+            processingStatus: "READY",
+          }),
+        })),
+      } as never,
+      {
+        find: vi.fn(() => ({
+          sort: vi.fn(() => ({
+            select: vi.fn(() => ({
+              exec: vi
+                .fn()
+                .mockResolvedValue([
+                  { text: "Your appeal was reviewed and rejected." },
+                ]),
+            })),
+          })),
+        })),
+      } as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      events as never,
+      { record: vi.fn().mockResolvedValue(undefined) } as never,
+      undefined as never,
+    );
+
+    await expect(
+      service.ingestUploadedResponse(caseId.toString(), evidenceId.toString()),
+    ).resolves.toEqual({ accepted: true, responseId: responseId.toString() });
+    expect(responseModel.create).toHaveBeenCalledTimes(1);
+    expect(events.appendInSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: caseId.toString(),
+        type: "RESPONSE_RECEIVED",
+      }),
+      expect.anything(),
     );
   });
 

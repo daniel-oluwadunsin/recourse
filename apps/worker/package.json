@@ -11,7 +11,7 @@
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
-    "start:dev": "nest start --watch --env-file ../../.env",
+    "dev": "nest start --watch --env-file ../../.env",
     "start:prod": "node dist/main.js",
     "lint": "eslint . --max-warnings 0",
     "check-types": "tsc --noEmit"
@@ -27,6 +27,7 @@
     "@recourse/contracts": "workspace:*",
     "@recourse/logger": "workspace:*",
     "@recourse/observability": "workspace:*",
+    "@sentry/node": "10.70.0",
     "api": "workspace:*",
     "argon2": "0.45.1",
     "bullmq": "6.1.2",

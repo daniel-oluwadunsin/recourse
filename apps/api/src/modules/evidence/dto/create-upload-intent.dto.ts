@@ -29,6 +29,5 @@ export class CreateUploadIntentDto {
 
   @IsOptional()
   @IsString()
-  @Max(200)
   label?: string | null;
 }

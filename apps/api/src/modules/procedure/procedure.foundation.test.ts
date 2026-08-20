@@ -7,6 +7,7 @@ import { ProcedureConfidenceService } from "./procedure-confidence.service";
 import {
   findConflicts,
   isProcedureCacheFresh,
+  procedureNeedsHumanIdempotencyKey,
   procedureNeedsRefresh,
   snapshotContentHash,
 } from "./procedure.service";
@@ -97,5 +98,21 @@ describe("procedural intelligence foundations", () => {
     });
     expect(result.confidence).toBeLessThan(0.75);
     expect(result.factors.conflictPenalty).toBe(0.15);
+  });
+
+  it("scopes repeated human-review reasons to the workflow revision", () => {
+    expect(
+      procedureNeedsHumanIdempotencyKey(
+        "case-1",
+        4,
+        "OUTPUT_PROVENANCE_INVALID",
+      ),
+    ).not.toBe(
+      procedureNeedsHumanIdempotencyKey(
+        "case-1",
+        6,
+        "OUTPUT_PROVENANCE_INVALID",
+      ),
+    );
   });
 });

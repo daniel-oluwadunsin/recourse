@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 
 import { AccessTokenGuard } from "../auth/guards/access-token.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -17,6 +18,7 @@ export class AppealsController {
   ) {}
 
   @Post("appeals/generate")
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
   generate(
     @CurrentUser() user: AuthenticatedUser,
     @Param("caseId") caseId: string,

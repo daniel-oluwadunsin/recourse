@@ -212,11 +212,21 @@ export class GroqProvider implements GenerativeAIProvider {
         (status ?? 0) >= 500;
       const retryHeader = error.headers?.get("retry-after");
       const retryAfterMs = retryHeader ? parseRetryAfter(retryHeader) : null;
+      const code =
+        status === 400 || status === 422
+          ? "GROQ_STRUCTURED_OUTPUT_REJECTED"
+          : status === 413
+            ? "AI_INPUT_TOO_LARGE"
+            : status === 401 || status === 403
+              ? "AI_PROVIDER_AUTH_FAILED"
+              : status === 429
+                ? "GROQ_RATE_LIMITED"
+                : fallbackCode;
       return new AIProviderError(
         retryable
           ? "Groq request was temporarily unavailable."
           : "Groq request was rejected.",
-        status === 429 ? "GROQ_RATE_LIMITED" : fallbackCode,
+        code,
         retryable,
         status,
         retryAfterMs,

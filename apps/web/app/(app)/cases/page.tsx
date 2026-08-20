@@ -27,7 +27,7 @@ function DeadlineCell({ caseId }: { caseId: string }) {
     <span className={deadline?.status === "EXPIRED" ? "text-red" : ""}>
       {deadline?.dueAt
         ? new Date(deadline.dueAt).toLocaleDateString()
-        : "Unknown"}
+        : "Not established"}
     </span>
   );
 }
@@ -118,11 +118,12 @@ export default function CasesPage() {
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id}>
+                  <tr key={item.id} className="case-row">
                     <td>
                       <Link
                         href={`/cases/${item.id}`}
-                        className="font-semibold text-blue underline underline-offset-4"
+                        className="case-row-link font-semibold text-blue underline underline-offset-4"
+                        aria-label={`Open case: ${item.title}`}
                       >
                         {item.title}
                       </Link>
@@ -135,7 +136,8 @@ export default function CasesPage() {
                       <StatusBadge status={item.status} />
                     </td>
                     <td>
-                      {item.readiness?.score == null ? (
+                      {!item.readiness?.computedAt ||
+                      item.readiness.score == null ? (
                         <span className="text-pencil-muted">
                           Not calculated
                         </span>
@@ -143,8 +145,9 @@ export default function CasesPage() {
                         `${Math.round(item.readiness.score)}%`
                       )}
                       <div className="mt-1 text-xs text-pencil-muted">
-                        {item.openCriticalGapCount} critical gap
-                        {item.openCriticalGapCount === 1 ? "" : "s"}
+                        {item.readiness?.computedAt
+                          ? `${item.openCriticalGapCount} critical gap${item.openCriticalGapCount === 1 ? "" : "s"}`
+                          : "Gaps not analyzed"}
                       </div>
                     </td>
                     <td>

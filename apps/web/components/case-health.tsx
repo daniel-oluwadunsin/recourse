@@ -20,10 +20,11 @@ export function CaseHealth({ caseId }: { caseId: string }) {
   const deadlines = useDeadlines(caseId);
   const item = caseQuery.data;
   const readiness = analysis.data?.readiness ?? item?.readiness;
+  const healthCalculated = Boolean(readiness?.computedAt);
   const criticalGaps =
-    analysis.data?.openCriticalGapCount ?? item?.openCriticalGapCount ?? 0;
+    analysis.data?.openCriticalGapCount ?? item?.openCriticalGapCount;
   const openContradictions =
-    analysis.data?.contradictionCount ?? item?.contradictionCount ?? 0;
+    analysis.data?.contradictionCount ?? item?.contradictionCount;
   const openDeadline = deadlines.data?.find(
     (deadline) => deadline.status === "OPEN",
   );
@@ -35,7 +36,9 @@ export function CaseHealth({ caseId }: { caseId: string }) {
       </div>
       <div className="health-score">
         <span className="health-score-number">
-          {readiness?.score == null ? "—" : `${Math.round(readiness.score)}%`}
+          {healthCalculated && readiness?.score != null
+            ? `${Math.round(readiness.score)}%`
+            : "—"}
         </span>
         <span className="text-xs text-pencil-muted">Readiness</span>
       </div>
@@ -44,13 +47,13 @@ export function CaseHealth({ caseId }: { caseId: string }) {
           <span>
             <Warning2 size={17} /> Critical gaps
           </span>
-          <strong>{criticalGaps}</strong>
+          <strong>{healthCalculated ? (criticalGaps ?? 0) : "—"}</strong>
         </div>
         <div className="health-row">
           <span>
             <Warning2 size={17} /> Open contradictions
           </span>
-          <strong>{openContradictions}</strong>
+          <strong>{healthCalculated ? (openContradictions ?? 0) : "—"}</strong>
         </div>
         <div className="health-row">
           <span>
@@ -67,10 +70,18 @@ export function CaseHealth({ caseId }: { caseId: string }) {
           <strong>
             {openDeadline?.dueAt
               ? new Date(openDeadline.dueAt).toLocaleDateString()
-              : "Unknown"}
+              : procedure.data?.procedure?.status === "ACTIVE"
+                ? "None established"
+                : "Not established"}
           </strong>
         </div>
       </div>
+      {!healthCalculated ? (
+        <p className="mt-4 text-xs leading-5 text-pencil-muted">
+          Readiness, gaps, and contradictions have not been calculated because
+          case analysis has not completed.
+        </p>
+      ) : null}
       {requirements.isFetching || contradictions.isFetching ? (
         <p className="mt-4 text-xs text-pencil-muted">
           Refreshing health signals…

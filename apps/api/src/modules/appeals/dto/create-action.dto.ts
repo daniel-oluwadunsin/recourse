@@ -1,4 +1,4 @@
-import { IsEnum, IsString, MaxLength, MinLength } from "class-validator";
+import { IsEnum, IsString, MinLength } from "class-validator";
 
 import {
   controlledActionTypeValues,
@@ -14,6 +14,5 @@ export class CreateActionDto {
 
   @IsString()
   @MinLength(8)
-  @MaxLength(200)
   idempotencyKey!: string;
 }

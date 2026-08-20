@@ -18,6 +18,8 @@ import { type EnvironmentConfig } from "@recourse/config";
 import { CaseEventService } from "../cases/case-events.service";
 import { Case } from "../cases/schemas/case.schema";
 import { EvidenceService } from "../evidence/evidence.service";
+import { Evidence } from "../evidence/schemas/evidence.schema";
+import { EvidenceBlock } from "../evidence/schemas/evidence-block.schema";
 import {
   EMAIL_PROVIDER,
   type EmailProvider,
@@ -52,6 +54,9 @@ export class EmailInboundService {
     @InjectModel(InboundEmail.name)
     private readonly inboundModel: Model<InboundEmail>,
     @InjectModel(Case.name) private readonly caseModel: Model<Case>,
+    @InjectModel(Evidence.name) private readonly evidenceModel: Model<Evidence>,
+    @InjectModel(EvidenceBlock.name)
+    private readonly evidenceBlockModel: Model<EvidenceBlock>,
     @Inject(EMAIL_PROVIDER) private readonly provider: EmailProvider,
     private readonly tokens: CaseEmailTokenService,
     private readonly evidence: EvidenceService,
@@ -89,6 +94,20 @@ export class EmailInboundService {
       parsed = signedWebhookPayloadSchema.parse(payload);
     } catch {
       throw new BadRequestException("Inbound email payload is invalid.");
+    }
+    const replayWindowMs =
+      (this.config.get("WEBHOOK_REPLAY_WINDOW_SECONDS") ?? 900) * 1000;
+    if (Math.abs(Date.now() - parsed.receivedAt.getTime()) > replayWindowMs) {
+      await this.audit.record(
+        AuditEventType.EMAIL_INBOUND_REJECTED,
+        {},
+        AuditOutcome.FAILURE,
+        {},
+        "STALE_EMAIL_WEBHOOK",
+      );
+      throw new BadRequestException(
+        "Inbound email payload is outside the replay window.",
+      );
     }
     return this.ingest(parsed);
   }
@@ -223,6 +242,127 @@ export class EmailInboundService {
     return { accepted: true, responseId: response._id.toString() };
   }
 
+  async ingestUploadedResponse(
+    caseId: string,
+    evidenceId: string,
+    correlationId?: string | null,
+  ): Promise<{ accepted: boolean; responseId: string | null }> {
+    if (
+      !Types.ObjectId.isValid(caseId) ||
+      !Types.ObjectId.isValid(evidenceId)
+    ) {
+      return { accepted: false, responseId: null };
+    }
+    const evidence = await this.evidenceModel
+      .findOne({
+        _id: new Types.ObjectId(evidenceId),
+        caseId: new Types.ObjectId(caseId),
+        deletedAt: null,
+        kind: "INSTITUTION_RESPONSE",
+        processingStatus: "READY",
+      })
+      .exec();
+    if (!evidence) return { accepted: false, responseId: null };
+
+    const providerMessageId = `uploaded-evidence:${evidence._id.toString()}`;
+    const existing = await this.responseModel
+      .findOne({ providerMessageId })
+      .exec();
+    if (existing) {
+      return { accepted: true, responseId: existing._id.toString() };
+    }
+
+    const blocks = await this.evidenceBlockModel
+      .find({ evidenceId: evidence._id })
+      .sort({ blockIndex: 1 })
+      .select({ text: 1 })
+      .exec();
+    const bodyText = blocks
+      .map((block) => block.text.trim())
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 500000);
+    if (!bodyText) return { accepted: false, responseId: null };
+
+    try {
+      const response = await this.connection.transaction(async (session) => {
+        const created = await this.responseModel.create(
+          [
+            {
+              addressedClaimIds: [],
+              analyzedAt: null,
+              associationStatus: "ASSOCIATED",
+              attachmentCount: 1,
+              bodyText,
+              caseId: evidence.caseId,
+              evidenceId: evidence._id,
+              fromAddress: "uploaded-response@local.recourse",
+              internetMessageId: null,
+              mentionedDeadlines: [],
+              newIssues: [],
+              outcome: null,
+              outcomeConfidence: null,
+              ownerId: evidence.ownerId,
+              processingStatus: "RECEIVED",
+              providerMessageId,
+              replanNextAction: null,
+              replanRationale: null,
+              replanRunId: null,
+              recommendedOutcome: null,
+              receivedAt: evidence.createdAt,
+              requestedEvidence: [],
+              revision: 0,
+              statedReason: null,
+              subject: evidence.label || evidence.originalFilename,
+              toAddresses: [],
+              unaddressedClaimIds: [],
+            },
+          ],
+          { session },
+        );
+        const item = created[0];
+        if (!item) throw new Error("Response creation returned no document.");
+        await this.events.appendInSession(
+          {
+            actor: {
+              actorId: evidence.ownerId.toString(),
+              actorType: "USER",
+              correlationId: correlationId ?? undefined,
+            },
+            caseId,
+            idempotencyKey: `response-received-upload-${evidence._id.toString()}`,
+            payload: {
+              attachmentCount: 1,
+              evidenceId: evidence._id.toString(),
+              responseId: item._id.toString(),
+            },
+            type: "RESPONSE_RECEIVED",
+          },
+          session,
+        );
+        return item;
+      });
+      await this.audit.record(
+        AuditEventType.EMAIL_INBOUND_ACCEPTED,
+        { userId: evidence.ownerId.toString() },
+        AuditOutcome.SUCCESS,
+        { caseId, responseId: response._id.toString(), source: "UPLOAD" },
+      );
+      return { accepted: true, responseId: response._id.toString() };
+    } catch (error: unknown) {
+      if (isMongoDuplicateKeyError(error)) {
+        const duplicate = await this.responseModel
+          .findOne({ providerMessageId })
+          .exec();
+        return {
+          accepted: Boolean(duplicate),
+          responseId: duplicate?._id.toString() ?? null,
+        };
+      }
+      throw error;
+    }
+  }
+
   async pollGmail(): Promise<number> {
     const interval = this.config.get("EMAIL_INBOUND_POLL_INTERVAL_MS") ?? 60000;
     if (Date.now() - this.lastPollAt < interval) return 0;
@@ -250,4 +390,13 @@ export class EmailInboundService {
       .sort({ receivedAt: -1, _id: -1 })
       .exec();
   }
+}
+
+function isMongoDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === 11000
+  );
 }

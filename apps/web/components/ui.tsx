@@ -29,7 +29,7 @@ export function Button({
   };
   return (
     <button
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${styles[variant]} ${className}`}
+      className={`wobbly-button inline-flex min-h-12 items-center justify-center gap-2 px-5 py-2 text-base font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${styles[variant]} ${className}`}
       disabled={loading || props.disabled}
       {...props}
     >
@@ -218,7 +218,7 @@ export function LinkButton({
   return (
     <Link
       href={href}
-      className={`inline-flex min-h-11 items-center gap-2 rounded-xl bg-pencil px-4 py-2 text-sm font-semibold !text-paper transition hover:-translate-y-0.5 ${className}`}
+      className={`wobbly-button inline-flex min-h-12 items-center gap-2 bg-pencil px-5 py-2 text-base font-semibold !text-paper transition ${className}`}
     >
       {children}
       <ArrowRight size={16} />

@@ -61,10 +61,13 @@ export class ReadinessService {
     const claimScore = input.claims.length
       ? groundedClaims / input.claims.length
       : 0;
-    const chronologyScore = input.timeline.length
-      ? input.timeline.filter(
+    const datedTimeline = input.timeline.filter(
+      (event) => event.normalizedDate,
+    );
+    const chronologyScore = datedTimeline.length
+      ? datedTimeline.filter(
           (event) => event.normalizedDate && event.datePrecision === "EXACT",
-        ).length / input.timeline.length
+        ).length / datedTimeline.length
       : 0;
     const procedureScore = input.procedureVersion?.confidence ?? 0;
     const jurisdictionScore = jurisdictionConfidence(input.caseDocument);
@@ -126,7 +129,9 @@ export class ReadinessService {
         chronologyScore,
         10,
         chronologyScore >= 1 ? "SATISFIED" : "UNCERTAIN",
-        `${input.timeline.filter((event) => event.normalizedDate).length}/${input.timeline.length} timeline events have dates.`,
+        datedTimeline.length
+          ? `${datedTimeline.filter((event) => event.datePrecision === "EXACT").length}/${datedTimeline.length} dated timeline events are exact.`
+          : "No dated timeline event is available.",
       ),
       factor(
         "procedure-confidence",

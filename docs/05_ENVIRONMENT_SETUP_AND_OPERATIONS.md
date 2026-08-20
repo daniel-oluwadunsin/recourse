@@ -870,3 +870,62 @@ The final Codex handoff should tell the operator to confirm:
 - [ ] security scan reviewed;
 - [ ] staging full-flow test passes;
 - [ ] no runtime mock/simulator remains.
+
+---
+
+# 17. Phase 12 privacy and security operations
+
+## 17.1 Required production controls
+
+- Set `CORS_ALLOWED_ORIGINS` to the exact HTTPS web origins. Wildcards are not
+  accepted in production.
+- Use Redis-backed throttling and budgets. Do not use `RATE_LIMIT_STORAGE=memory`
+  in staging or production.
+- Set `AUTH_COOKIE_SECURE=true`, use a strong `METRICS_TOKEN` when metrics are
+  enabled, and keep all provider keys server-side.
+- Set `MALWARE_SCAN_REQUIRED=true` and configure `MALWARE_SCANNER_URL` before
+  accepting arbitrary production uploads. The scanner endpoint must be a
+  trusted internal/managed service and return `{ "clean": true }` only after
+  scanning the request body.
+- Configure `SENTRY_DSN` and/or `OTEL_EXPORTER_OTLP_ENDPOINT` only after
+  confirming that the telemetry destination is approved for operational data.
+  Recourse strips request bodies, users, cookies, breadcrumbs, and document
+  content from Sentry events.
+
+## 17.2 Data lifecycle
+
+The default retention settings are conservative operational defaults, not a
+legal policy:
+
+- `RETENTION_CASE_DAYS` and `RETENTION_EVIDENCE_DAYS` govern the maintenance
+  cleanup policy for inactive private records.
+- `RETENTION_AUDIT_DAYS` preserves security/audit records separately from
+  user-content retention.
+- `RETENTION_SOURCE_SNAPSHOT_DAYS` applies to externally retrieved snapshots;
+  public-source retention must still be reviewed for copyright and policy.
+- `DELETION_GRACE_PERIOD_HOURS` is the operator-controlled window for cleanup
+  reconciliation. User-triggered case deletion tombstones the case first,
+  invalidates late jobs, and removes private storage objects before metadata
+  cleanup.
+
+`DELETE /api/v1/auth/me` performs account deletion: it locks the account,
+revokes sessions, tombstones and cleans each owned case/evidence object, removes
+private case-associated records, removes auth tokens, then deletes the user.
+Audit records are intentionally retained according to the separate audit
+retention policy and contain opaque identifiers/hashes rather than evidence.
+
+## 17.3 Abuse and spend controls
+
+The API applies named request throttles to authentication, uploads, case
+creation, inbound webhooks, and appeal generation. Redis daily budgets bound
+AI operations per case, Tavily procedure resolutions per case, and outbound
+email per user. Provider dashboards must still have spend alerts and hard
+limits; application budgets are a second control, not a billing guarantee.
+
+## 17.4 Security response
+
+For suspected exposure, revoke sessions and provider keys, disable the affected
+provider, preserve the security audit trail, inspect queue/provider access, and
+follow the applicable incident-response and notification process. Never include
+raw evidence, email bodies, signed URLs, passwords, or provider tokens in an
+incident ticket or log stream.

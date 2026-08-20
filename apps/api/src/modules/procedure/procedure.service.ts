@@ -1,8 +1,10 @@
 import {
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { ConfigService } from "@nestjs/config";
@@ -11,6 +13,10 @@ import { performance } from "node:perf_hooks";
 import { isValidObjectId, Model, Types } from "mongoose";
 
 import { type EnvironmentConfig } from "@recourse/config";
+import {
+  UsageBudgetExceededError,
+  UsageBudgetService,
+} from "../../common/security/usage-budget.service";
 import {
   procedureRetrievalJobPayloadSchema,
   type ProcedureRetrievalJobPayload,
@@ -25,6 +31,8 @@ import {
   type EmbeddingProvider,
 } from "../embeddings/embedding.types";
 import { Case } from "../cases/schemas/case.schema";
+import { CaseEvent } from "../cases/schemas/case-event.schema";
+import { type CaseActor } from "../cases/cases.types";
 import { Decision } from "../cases/schemas/decision.schema";
 import { InstitutionLookupService } from "../cases/institutions.service";
 import { Institution } from "../cases/schemas/institution.schema";
@@ -59,11 +67,26 @@ export class ProcedureResolutionError extends Error {
   }
 }
 
+const RECOVERABLE_PROCEDURE_REASONS = new Set([
+  "CACHED_PROCEDURE_UNRESOLVED",
+  "GROQ_REQUEST_FAILED",
+  "GROQ_STRUCTURED_OUTPUT_REJECTED",
+  "AI_INPUT_TOO_LARGE",
+  "INVALID_PROVIDER_JSON",
+  "NO_AUTHORITATIVE_SOURCES",
+  "OUTPUT_PROVENANCE_INVALID",
+  "PROCEDURE_CONFIDENCE_INSUFFICIENT",
+  "PROCEDURE_CONFLICTED",
+  "PROVIDER_SCHEMA_MISMATCH",
+]);
+
 @Injectable()
 export class ProcedureService {
   constructor(
     private readonly config: ConfigService<EnvironmentConfig>,
     @InjectModel(Case.name) private readonly caseModel: Model<Case>,
+    @InjectModel(CaseEvent.name)
+    private readonly caseEventModel: Model<CaseEvent>,
     @InjectModel(Decision.name) private readonly decisionModel: Model<Decision>,
     @InjectModel(Institution.name)
     private readonly institutionModel: Model<Institution>,
@@ -88,6 +111,7 @@ export class ProcedureService {
     private readonly stateMachine: CaseStateMachineService,
     @Inject(EMBEDDING_PROVIDER)
     private readonly embeddings: EmbeddingProvider,
+    @Optional() private readonly budget?: UsageBudgetService,
   ) {}
 
   async resolve(payload: ProcedureRetrievalJobPayload): Promise<{
@@ -145,6 +169,29 @@ export class ProcedureService {
       jurisdictionKey: jurisdictionKey(decision.jurisdiction),
     });
 
+    try {
+      await this.budget?.consumeTavilyCase(parsed.caseId);
+    } catch (error: unknown) {
+      if (!(error instanceof UsageBudgetExceededError)) throw error;
+      const procedure = await this.upsertProcedure(
+        plan,
+        institution,
+        "UNRESOLVED",
+      );
+      await this.markNeedsHuman(
+        caseDocument,
+        "SAFETY_BUDGET_EXHAUSTED",
+        parsed.correlationId,
+        procedure,
+        null,
+      );
+      return {
+        status: "budget-exhausted",
+        procedureId: procedure._id.toString(),
+        versionId: null,
+      };
+    }
+
     const cached = await this.cachedProcedure(plan);
     if (cached) {
       const attached = await this.attachIfReady(
@@ -153,6 +200,15 @@ export class ProcedureService {
         cached.version,
         parsed.correlationId,
       );
+      if (!attached) {
+        await this.markNeedsHuman(
+          caseDocument,
+          "CACHED_PROCEDURE_UNRESOLVED",
+          parsed.correlationId,
+          cached.procedure,
+          cached.version,
+        );
+      }
       return {
         status: attached ? "cached-attached" : "cached-unresolved",
         procedureId: cached.procedure._id.toString(),
@@ -171,6 +227,13 @@ export class ProcedureService {
         institution,
         "UNRESOLVED",
       );
+      await this.markNeedsHuman(
+        caseDocument,
+        "NO_AUTHORITATIVE_SOURCES",
+        parsed.correlationId,
+        procedure,
+        null,
+      );
       return {
         status: "unresolved",
         procedureId: procedure._id.toString(),
@@ -184,25 +247,30 @@ export class ProcedureService {
       relationship: plan.scope.relationship ?? "UNKNOWN",
       decisionType: plan.scope.decisionType ?? "UNKNOWN",
       jurisdictionKey: plan.scope.jurisdictionKey,
-      sources: sources.map((source) => ({
-        sourceSnapshotId: source.snapshot._id.toString(),
-        canonicalUrl: source.snapshot.canonicalUrl,
-        authorityTier: source.snapshot.authorityTier,
-        paragraphs: source.snapshot.paragraphs.map((paragraph) => ({
-          paragraphId: paragraph.paragraphId,
-          text: paragraph.text,
-        })),
-      })),
+      sources: boundedExtractionSources(sources),
     };
     let extracted: ExtractProcedureOutput;
     try {
       extracted = (await this.ai.extractProcedure(extractionInput)).output;
     } catch (error: unknown) {
       if (isAIProviderError(error)) {
+        // Rate limits and transient provider outages must remain retryable at
+        // the BullMQ boundary. Treating them as a successful unresolved run
+        // strands the case in PROCEDURE_RESOLUTION with no way to advance.
+        if (error.retryable) {
+          throw error;
+        }
         const procedure = await this.upsertProcedure(
           plan,
           institution,
           "UNRESOLVED",
+        );
+        await this.markNeedsHuman(
+          caseDocument,
+          error.code,
+          parsed.correlationId,
+          procedure,
+          null,
         );
         return {
           status: "ai-unavailable",
@@ -234,6 +302,15 @@ export class ProcedureService {
         previousVersion,
         parsed.correlationId,
       );
+      if (!attached) {
+        await this.markNeedsHuman(
+          caseDocument,
+          "PROCEDURE_CONFIDENCE_INSUFFICIENT",
+          parsed.correlationId,
+          procedure,
+          previousVersion,
+        );
+      }
       return {
         status: attached ? "unchanged-attached" : "unchanged-unresolved",
         procedureId: procedure._id.toString(),
@@ -333,27 +410,39 @@ export class ProcedureService {
         },
       })
       .exec();
-    const freshVersion = await this.procedureVersionModel
-      .findById(version._id)
-      .exec();
-    if (!freshVersion)
+    const [freshProcedure, freshVersion] = await Promise.all([
+      this.procedureModel.findById(procedure._id).exec(),
+      this.procedureVersionModel.findById(version._id).exec(),
+    ]);
+    if (!freshProcedure || !freshVersion)
       throw new ProcedureResolutionError(
-        "VERSION_MISSING",
-        "Procedure version was not persisted.",
+        "PROCEDURE_PERSISTENCE_INCOMPLETE",
+        "Procedure resolution was not fully persisted.",
       );
     const attached = await this.attachIfReady(
       caseDocument,
-      procedure,
+      freshProcedure,
       freshVersion,
       parsed.correlationId,
     );
+    if (!attached) {
+      await this.markNeedsHuman(
+        caseDocument,
+        conflicts.length > 0
+          ? "PROCEDURE_CONFLICTED"
+          : "PROCEDURE_CONFIDENCE_INSUFFICIENT",
+        parsed.correlationId,
+        freshProcedure,
+        freshVersion,
+      );
+    }
     return {
       status: attached
         ? "resolved"
         : conflicts.length > 0
           ? "conflicted"
           : "unresolved",
-      procedureId: procedure._id.toString(),
+      procedureId: freshProcedure._id.toString(),
       versionId: freshVersion._id.toString(),
     };
   }
@@ -363,8 +452,15 @@ export class ProcedureService {
     caseId: string,
   ): Promise<Record<string, unknown>> {
     const context = await this.ownerCase(userId, caseId);
+    const review = await this.reviewState(context._id, context.status);
     if (!context.activeProcedureId)
-      return { procedure: null, version: null, claims: [], sources: [] };
+      return {
+        procedure: null,
+        version: null,
+        claims: [],
+        sources: [],
+        review,
+      };
     const procedure = await this.procedureModel
       .findById(context.activeProcedureId)
       .lean()
@@ -383,9 +479,23 @@ export class ProcedureService {
           .lean()
           .exec()
       : [];
-    const sources = version
+    let sourceSnapshotIds = version?.sourceSnapshotIds ?? [];
+    if (!version) {
+      const retrievalRuns = await this.retrievalRunModel
+        .find({ caseId: context._id, sourceSnapshotIds: { $ne: [] } })
+        .select({ sourceSnapshotIds: 1 })
+        .exec();
+      sourceSnapshotIds = [
+        ...new Map(
+          retrievalRuns
+            .flatMap((run) => run.sourceSnapshotIds)
+            .map((id) => [id.toString(), id]),
+        ).values(),
+      ];
+    }
+    const sources = sourceSnapshotIds.length
       ? await this.sourceSnapshotModel
-          .find({ _id: { $in: version.sourceSnapshotIds } })
+          .find({ _id: { $in: sourceSnapshotIds } })
           .sort({ retrievedAt: -1 })
           .lean()
           .exec()
@@ -394,7 +504,63 @@ export class ProcedureService {
       procedure,
       version,
       claims,
+      review,
       sources: sources.map((source) => publicSource(source)),
+    };
+  }
+
+  async retryResolution(
+    userId: string,
+    caseId: string,
+    actor: CaseActor,
+  ): Promise<{ caseId: string; status: string }> {
+    const context = await this.ownerCase(userId, caseId);
+    const review = await this.reviewState(context._id, context.status);
+    if (context.status !== "NEEDS_HUMAN" || !review.retriable) {
+      throw new ConflictException(
+        "This case does not have a recoverable procedure-resolution failure.",
+      );
+    }
+    const transition = await this.stateMachine.transition(
+      context._id.toString(),
+      "PROCEDURE_RESOLUTION",
+      actor,
+      {
+        expectedCurrent: ["NEEDS_HUMAN"],
+        expectedRevision: context.revision,
+        idempotencyKey: `procedure-user-retry-${context._id.toString()}-${context.revision}`,
+        payload: {
+          reason: review.reason,
+          recovery: "USER_REQUESTED_PROCEDURE_RETRY",
+        },
+      },
+    );
+    return {
+      caseId: transition.case._id.toString(),
+      status: transition.case.status,
+    };
+  }
+
+  private async reviewState(
+    caseId: Types.ObjectId,
+    status: string,
+  ): Promise<{
+    reason: string | null;
+    retriable: boolean;
+  }> {
+    if (status !== "NEEDS_HUMAN") {
+      return { reason: null, retriable: false };
+    }
+    const event = await this.caseEventModel
+      .findOne({ caseId, type: "CASE_NEEDS_HUMAN" })
+      .sort({ sequence: -1 })
+      .select({ payload: 1 })
+      .lean()
+      .exec();
+    const reason = readString(event?.payload, "reason");
+    return {
+      reason,
+      retriable: reason ? RECOVERABLE_PROCEDURE_REASONS.has(reason) : false,
     };
   }
 
@@ -690,12 +856,18 @@ export class ProcedureService {
         .findOneAndUpdate(
           { canonicalUrl: normalized.canonicalUrl, contentSha256 },
           {
+            $set: {
+              authorityTier: rank.authorityTier,
+              metadata: {
+                authorityScore: rank.score,
+                authorityFactors: rank.factors,
+              },
+            },
             $setOnInsert: {
               url: result.url,
               canonicalUrl: normalized.canonicalUrl,
               domain: normalized.domain,
               title: result.title,
-              authorityTier: rank.authorityTier,
               jurisdiction: null,
               retrievedAt: new Date(),
               contentSha256,
@@ -705,10 +877,6 @@ export class ProcedureService {
               retrievalRunId: runId,
               paragraphs,
               status: "RETRIEVED",
-              metadata: {
-                authorityScore: rank.score,
-                authorityFactors: rank.factors,
-              },
             },
           },
           { upsert: true, new: true },
@@ -1002,6 +1170,49 @@ export class ProcedureService {
     return true;
   }
 
+  private async markNeedsHuman(
+    caseDocument: import("../cases/schemas/case.schema").CaseDocument,
+    reason: string,
+    correlationId: string | null,
+    procedure: import("./schemas/procedure.schema").ProcedureDocument,
+    version:
+      | import("./schemas/procedure-version.schema").ProcedureVersionDocument
+      | null,
+  ): Promise<void> {
+    if (caseDocument.status !== "PROCEDURE_RESOLUTION") return;
+    await this.stateMachine.transition(
+      caseDocument._id.toString(),
+      "NEEDS_HUMAN",
+      {
+        actorId: null,
+        actorType: "SYSTEM",
+        correlationId: correlationId ?? undefined,
+      },
+      {
+        eventType: "CASE_NEEDS_HUMAN",
+        expectedCurrent: ["PROCEDURE_RESOLUTION"],
+        expectedRevision: caseDocument.revision,
+        // The same provider/boundary reason can recur after an explicit user
+        // recovery. Revision scopes deduplication to this workflow attempt so
+        // an older CASE_NEEDS_HUMAN event cannot suppress the new transition.
+        idempotencyKey: procedureNeedsHumanIdempotencyKey(
+          caseDocument._id.toString(),
+          caseDocument.revision,
+          version?._id.toString() ?? reason,
+        ),
+        payload: {
+          procedureId: procedure._id.toString(),
+          procedureVersionId: version?._id.toString() ?? null,
+          reason,
+        },
+        setFields: {
+          activeProcedureId: procedure._id,
+          activeProcedureVersionId: version?._id ?? null,
+        },
+      },
+    );
+  }
+
   private async ownerCase(
     userId: string,
     caseId: string,
@@ -1110,6 +1321,64 @@ function normalizeParagraphs(
     }));
 }
 
+export function boundedExtractionSources(
+  sources: Array<{
+    snapshot: import("../retrieval/schemas/source-snapshot.schema").SourceSnapshotDocument;
+    score: number;
+  }>,
+  maxCharacters = 3_500,
+): Array<{
+  sourceSnapshotId: string;
+  canonicalUrl: string;
+  authorityTier: SourceAuthorityTier;
+  paragraphs: Array<{ paragraphId: string; text: string }>;
+}> {
+  let remaining = maxCharacters;
+  const selected: Array<{
+    sourceSnapshotId: string;
+    canonicalUrl: string;
+    authorityTier: SourceAuthorityTier;
+    paragraphs: Array<{ paragraphId: string; text: string }>;
+  }> = [];
+  const prioritized = [...sources]
+    .sort(
+      (left, right) =>
+        authorityPriority(left.snapshot.authorityTier) -
+          authorityPriority(right.snapshot.authorityTier) ||
+        right.score - left.score,
+    )
+    .slice(0, 3);
+  for (const { snapshot } of prioritized) {
+    if (remaining <= 0) break;
+    const paragraphs: Array<{ paragraphId: string; text: string }> = [];
+    for (const paragraph of snapshot.paragraphs.slice(0, 30)) {
+      const cost = paragraph.text.length + paragraph.paragraphId.length;
+      if (cost > remaining) continue;
+      paragraphs.push({
+        paragraphId: paragraph.paragraphId,
+        text: paragraph.text,
+      });
+      remaining -= cost;
+    }
+    if (paragraphs.length > 0) {
+      selected.push({
+        sourceSnapshotId: snapshot._id.toString(),
+        canonicalUrl: snapshot.canonicalUrl,
+        authorityTier: snapshot.authorityTier,
+        paragraphs,
+      });
+    }
+  }
+  return selected;
+}
+
+function authorityPriority(value: SourceAuthorityTier): number {
+  if (value.startsWith("TIER_1_")) return 1;
+  if (value === "TIER_2_REPUTABLE_SECONDARY") return 2;
+  if (value === "TIER_3_UNOFFICIAL") return 3;
+  return 4;
+}
+
 export function isProcedureCacheFresh(
   lastVerifiedAt: Date,
   now: Date,
@@ -1128,6 +1397,14 @@ export function procedureNeedsRefresh(
   staleAfterHours: number,
 ): boolean {
   return now.getTime() - lastVerifiedAt.getTime() > staleAfterHours * 3_600_000;
+}
+
+export function procedureNeedsHumanIdempotencyKey(
+  caseId: string,
+  revision: number,
+  reasonOrVersion: string,
+): string {
+  return `procedure-needs-human-${caseId}-${revision}-${reasonOrVersion}`;
 }
 
 function jurisdictionKey(
@@ -1227,4 +1504,14 @@ function publicSource(source: {
 
 function digestText(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function readString(
+  value: Record<string, unknown> | null | undefined,
+  key: string,
+): string | null {
+  const candidate = value?.[key];
+  return typeof candidate === "string" && candidate.length > 0
+    ? candidate
+    : null;
 }

@@ -8,7 +8,7 @@ import { Queue, QueueEvents } from "bullmq";
 
 import { type QueueName, type QueueRetryCategory } from "@recourse/contracts";
 import { type EnvironmentConfig } from "@recourse/config";
-import { RecourseLogger } from "@recourse/logger";
+import { RecourseLogger, sanitizeLogText } from "@recourse/logger";
 
 import { JobFailureService } from "api/queues";
 import { QueueNames } from "api/queue-constants";
@@ -118,5 +118,5 @@ function errorCodeFromReason(reason: string): string {
 
 function safeMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/\s+/g, " ").slice(0, 500);
+  return sanitizeLogText(message.replace(/\s+/g, " ")).slice(0, 500);
 }

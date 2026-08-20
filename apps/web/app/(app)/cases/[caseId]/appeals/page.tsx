@@ -283,11 +283,37 @@ export default function AppealsPage() {
                   <p className="text-xs uppercase tracking-wide text-pencil-muted">
                     Recommendation
                   </p>
-                  <pre className="mt-2 whitespace-pre-wrap rounded-xl bg-muted p-3 text-xs">
-                    {JSON.stringify(createdAction.recommendation, null, 2)}
-                  </pre>
+                  <p className="mt-2 text-sm leading-6">
+                    {createdAction.recommendation.reason}
+                  </p>
+                  {createdAction.recommendation.instructions.length > 0 ? (
+                    <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-pencil-muted">
+                      {createdAction.recommendation.instructions.map(
+                        (instruction) => (
+                          <li key={instruction}>{instruction}</li>
+                        ),
+                      )}
+                    </ol>
+                  ) : null}
                 </div>
                 <div>
+                  <p className="text-xs uppercase tracking-wide text-pencil-muted">
+                    Official destination
+                  </p>
+                  {createdAction.recommendation.officialDestination ? (
+                    <a
+                      className="mt-2 block break-all font-semibold text-blue hover:underline"
+                      href={createdAction.recommendation.officialDestination}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open the verified institution page
+                    </a>
+                  ) : (
+                    <p className="mt-2 text-sm text-pencil-muted">
+                      No verified destination is available.
+                    </p>
+                  )}
                   <p className="text-xs uppercase tracking-wide text-pencil-muted">
                     External reference
                   </p>

@@ -20,6 +20,7 @@ import { AIOperationsProcessor } from "./processors/ai-operations.processor";
 import { ProcedureRetrievalProcessor } from "./processors/procedure-retrieval.processor";
 import { EmailModule } from "api/email";
 import { NotificationProcessor } from "./processors/notification.processor";
+import { SecurityModule } from "api/security";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { NotificationProcessor } from "./processors/notification.processor";
       isGlobal: true,
       validate: (config: Record<string, unknown>) => parseEnvironment(config),
     }),
+    SecurityModule,
     BullModule.forRootAsync("worker", {
       imports: [ConfigModule],
       inject: [ConfigService],

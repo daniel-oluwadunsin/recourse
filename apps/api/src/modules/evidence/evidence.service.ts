@@ -26,6 +26,10 @@ import {
 import { DocumentExtractionService } from "./document-extraction.service";
 import { ExtractionFailure, type ExtractionResult } from "./extraction.types";
 import { EvidenceStateMachineService } from "./evidence-state-machine.service";
+import {
+  MalwareScanError,
+  MalwareScanService,
+} from "../../common/security/malware-scan.service";
 import { Evidence, type EvidenceDocument } from "./schemas/evidence.schema";
 import {
   EvidenceBlock,
@@ -36,6 +40,7 @@ import {
   createOpaqueStorageKey,
   STORAGE_PROVIDER,
   StorageProviderError,
+  type StoredObjectMetadata,
   type StorageProvider,
 } from "../storage/storage.types";
 
@@ -56,6 +61,7 @@ export class EvidenceService {
     private readonly filePolicy: FilePolicyService,
     private readonly extraction: DocumentExtractionService,
     private readonly stateMachine: EvidenceStateMachineService,
+    private readonly malwareScan: MalwareScanService,
     private readonly caseEventService: CaseEventService,
     private readonly ownership: OwnershipAuthorizationService,
   ) {}
@@ -81,6 +87,7 @@ export class EvidenceService {
     const normalized = this.normalizeInput(input);
     const storageKey = createOpaqueStorageKey(
       this.config.get("CLOUDINARY_UPLOAD_FOLDER") ?? "recourse",
+      normalized.extension,
     );
     const expiresAt = new Date(
       Date.now() +
@@ -110,6 +117,7 @@ export class EvidenceService {
         processingErrorCode: null,
         processingErrorMessage: null,
         processingStatus: "UPLOADING",
+        malwareScanStatus: "PENDING",
         revision: 0,
         sha256: null,
         storageAssetId: null,
@@ -282,6 +290,166 @@ export class EvidenceService {
     }
   }
 
+  async createTextEvidence(
+    ownerId: string,
+    caseId: string,
+    input: {
+      text: string;
+      label?: string | null;
+      kind?: Evidence["kind"];
+    },
+    actor: EvidenceActor,
+  ): Promise<PublicEvidence> {
+    const activeCase = await this.findOwnedCase(ownerId, caseId);
+    const text = input.text.trim();
+    if (!text) {
+      throw toEvidenceHttpError(
+        new EvidenceInputError("Evidence text is required.", "INVALID_TEXT"),
+      );
+    }
+
+    const bytes = Buffer.from(text, "utf8");
+    const maximum = this.filePolicy.maximumBytes("text/plain");
+    if (bytes.byteLength > maximum) {
+      throw toEvidenceHttpError(
+        new EvidenceInputError(
+          `Text evidence exceeds the configured ${maximum} byte limit.`,
+          "FILE_TOO_LARGE",
+        ),
+      );
+    }
+    try {
+      this.filePolicy.validateContentSignature(bytes.subarray(0, 8192), {
+        extension: "txt",
+        mimeType: "text/plain",
+      });
+    } catch (error) {
+      throw toEvidenceHttpError(error);
+    }
+
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const duplicate = await this.evidenceModel
+      .findOne({ caseId: activeCase._id, deletedAt: null, sha256 })
+      .select({ _id: 1 })
+      .exec();
+    if (duplicate) {
+      throw new ConflictException("This text is already attached to the case.");
+    }
+    if (!this.storage.uploadObject) {
+      throw toEvidenceHttpError(
+        new StorageProviderError(
+          "The configured storage provider cannot persist text evidence.",
+          "NOT_CONFIGURED",
+        ),
+      );
+    }
+
+    const storageKey = createOpaqueStorageKey(
+      this.config.get("CLOUDINARY_UPLOAD_FOLDER") ?? "recourse",
+      "txt",
+    );
+    let metadata: StoredObjectMetadata;
+    let malwareScanStatus: Evidence["malwareScanStatus"];
+    try {
+      malwareScanStatus = await this.malwareScan.scan({
+        bytes,
+        filename: "case-notes.txt",
+        mimeType: "text/plain",
+      });
+      metadata = await this.storage.uploadObject({
+        bytes,
+        contentType: "text/plain; charset=utf-8",
+        storageKey,
+      });
+    } catch (error) {
+      throw toEvidenceHttpError(error);
+    }
+
+    try {
+      const created = await this.connection.transaction(async (session) => {
+        const [evidence] = await this.evidenceModel.create(
+          [
+            {
+              byteSize: bytes.byteLength,
+              caseId: activeCase._id,
+              deletedAt: null,
+              deletionVersion: 0,
+              extension: "txt",
+              extractionCompletedAt: new Date(),
+              extractionMetadata: { source: "USER_ENTERED_TEXT" },
+              extractionMethod: "PLAIN_TEXT",
+              kind: input.kind ?? "TEXT",
+              label: input.label?.trim() || "Case notes",
+              malwareScanStatus,
+              mimeType: "text/plain",
+              originalFilename: "case-notes.txt",
+              ownerId: activeCase.ownerId,
+              pageCount: null,
+              processingErrorCode: null,
+              processingErrorMessage: null,
+              processingStatus: "READY",
+              revision: 1,
+              sha256,
+              storageAssetId: metadata.assetId,
+              storageKey,
+              storageVersion: metadata.version,
+              uploadExpiresAt: new Date(),
+            },
+          ],
+          { session },
+        );
+        if (!evidence) {
+          throw new Error("Text evidence creation returned no document.");
+        }
+
+        await this.evidenceBlockModel.create(
+          [
+            {
+              blockIndex: 0,
+              blockType: "TEXT",
+              characterEnd: text.length,
+              characterStart: 0,
+              caseId: activeCase._id,
+              evidenceId: evidence._id,
+              extractionMethod: "PLAIN_TEXT",
+              metadata: { source: "USER_ENTERED_TEXT" },
+              normalizedText: text.replace(/\s+/gu, " ").trim(),
+              ownerId: activeCase.ownerId,
+              pageNumber: null,
+              provenance: { status: "USER_ASSERTED" },
+              text,
+            },
+          ],
+          { session },
+        );
+        await this.caseEventService.appendInSession(
+          {
+            actor: toCaseActor(actor),
+            caseId,
+            idempotencyKey: `evidence-processed:${evidence._id.toString()}:text-v1`,
+            payload: {
+              blockCount: 1,
+              evidenceId: evidence._id.toString(),
+              extractionMethod: "PLAIN_TEXT",
+            },
+            type: "EVIDENCE_PROCESSED",
+          },
+          session,
+        );
+        return evidence;
+      });
+      return this.toPublic(created);
+    } catch (error) {
+      await this.safeDeleteObject(storageKey);
+      if (isMongoDuplicateKeyError(error)) {
+        throw new ConflictException(
+          "This text is already attached to the case.",
+        );
+      }
+      throw toEvidenceHttpError(error);
+    }
+  }
+
   async list(
     ownerId: string,
     caseId: string,
@@ -356,6 +524,11 @@ export class EvidenceService {
     );
     if (evidence.processingStatus === "DELETING") {
       throw new ConflictException("Evidence is being deleted.");
+    }
+    if (!["CLEAN", "SKIPPED"].includes(evidence.malwareScanStatus)) {
+      throw new ConflictException(
+        "Evidence is not available until security scanning completes.",
+      );
     }
     const expiresAt = new Date(
       Date.now() +
@@ -516,24 +689,44 @@ export class EvidenceService {
         await this.storage.downloadObject(processing.storageKey),
         this.filePolicy.maximumBytes(normalized.mimeType),
       );
+      const malwareStatus = await this.malwareScan.scan({
+        bytes: buffer,
+        filename: normalized.originalFilename,
+        mimeType: normalized.mimeType,
+      });
+      processing.malwareScanStatus = malwareStatus;
       result = await this.extraction.extract(buffer, normalized);
     } catch (error) {
       const failure = error instanceof ExtractionFailure ? error : null;
+      const malwareFailure = error instanceof MalwareScanError ? error : null;
       const status =
         failure?.code === "UNSUPPORTED_FORMAT" ? "UNSUPPORTED" : "FAILED";
       const errorCode =
-        failure?.code === "UNSUPPORTED_FORMAT"
-          ? "UNSUPPORTED_FORMAT"
-          : "PARSER_FAILED";
+        malwareFailure?.code === "MALWARE_DETECTED"
+          ? "MALWARE_DETECTED"
+          : malwareFailure
+            ? "MALWARE_SCAN_FAILED"
+            : failure?.code === "UNSUPPORTED_FORMAT"
+              ? "UNSUPPORTED_FORMAT"
+              : "PARSER_FAILED";
       await this.markProcessingFailure(
         processing,
         status,
         errorCode,
-        failure?.message ?? "Evidence extraction failed.",
+        malwareFailure?.message ??
+          failure?.message ??
+          "Evidence extraction failed.",
+        malwareFailure
+          ? malwareFailure.code === "MALWARE_DETECTED"
+            ? "INFECTED"
+            : "FAILED"
+          : processing.malwareScanStatus,
       );
-      throw error instanceof Error
-        ? error
-        : new Error("Evidence extraction failed.");
+      throw toEvidenceHttpError(
+        error instanceof Error
+          ? error
+          : new Error("Evidence extraction failed."),
+      );
     }
 
     const completed = await this.connection.transaction(async (session) => {
@@ -582,6 +775,10 @@ export class EvidenceService {
               fallbackAvailable: result.fallbackAvailable,
             },
             extractionMethod: result.extractionMethod,
+            // The scanner result is produced after the PROCESSING document is
+            // loaded and is intentionally persisted with the extraction in
+            // this transaction. `current` still contains the pre-scan value.
+            malwareScanStatus: processing.malwareScanStatus,
             pageCount: result.pageCount,
             processingErrorCode: null,
             processingErrorMessage: null,
@@ -654,7 +851,13 @@ export class EvidenceService {
     }
     const storageKey = createOpaqueStorageKey(
       this.config.get("CLOUDINARY_UPLOAD_FOLDER") ?? "recourse",
+      "txt",
     );
+    const malwareScanStatus = await this.malwareScan.scan({
+      bytes,
+      filename: "inbound-response.txt",
+      mimeType: "text/plain",
+    });
     const metadata = await this.storage.uploadObject({
       bytes,
       contentType: "text/plain; charset=utf-8",
@@ -681,6 +884,7 @@ export class EvidenceService {
         processingErrorCode: null,
         processingErrorMessage: null,
         processingStatus: "READY",
+        malwareScanStatus,
         revision: 1,
         sha256,
         storageAssetId: metadata.assetId,
@@ -852,6 +1056,7 @@ export class EvidenceService {
     status: "FAILED" | "UNSUPPORTED",
     code: Evidence["processingErrorCode"],
     message: string,
+    malwareScanStatus?: Evidence["malwareScanStatus"],
   ): Promise<void> {
     await this.evidenceModel.updateOne(
       {
@@ -866,6 +1071,7 @@ export class EvidenceService {
           processingErrorCode: code,
           processingErrorMessage: message.slice(0, 500),
           processingStatus: status,
+          ...(malwareScanStatus ? { malwareScanStatus } : {}),
         },
       },
     );
@@ -887,6 +1093,7 @@ export class EvidenceService {
       pageCount: evidence.pageCount,
       processingErrorCode: evidence.processingErrorCode,
       processingStatus: evidence.processingStatus,
+      malwareScanStatus: evidence.malwareScanStatus,
       revision: evidence.revision,
       sha256: evidence.sha256,
       updatedAt: evidence.updatedAt,

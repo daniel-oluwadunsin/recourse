@@ -22,12 +22,14 @@ export class AuthorityRankingService {
   }): RankedSource | null {
     const normalized = normalizeUrl(input.url);
     if (!normalized) return null;
-    const official =
+    const officialDomain =
       input.institution?.verifiedOfficialDomains.some(
         (domain) =>
           normalized.domain === domain ||
           normalized.domain.endsWith(`.${domain}`),
       ) ?? false;
+    const official =
+      officialDomain && isInstitutionPublishedPage(normalized.canonicalUrl);
     const isGovernment =
       normalized.domain.endsWith(".gov") || normalized.domain.includes(".gov.");
     const isRegulator =
@@ -77,6 +79,17 @@ export class AuthorityRankingService {
       operation: "SEARCH",
     };
   }
+}
+
+/** User-generated and media pages do not become authoritative merely because
+ * they are hosted below an institution's verified domain. */
+export function isInstitutionPublishedPage(canonicalUrl: string): boolean {
+  const path = new URL(canonicalUrl).pathname.toLowerCase();
+  return ![
+    /\/(?:community|community-guide|thread|threads)(?:\/|$)/u,
+    /\/(?:channel|shorts|user|watch)(?:\/|$)/u,
+    /\/@[^/]+(?:\/|$)/u,
+  ].some((pattern) => pattern.test(path));
 }
 
 function relevanceScore(text: string, terms: string[]): number {

@@ -47,6 +47,24 @@ export class UsersService {
       .exec() as Promise<UserDocument | null>;
   }
 
+  async findActiveByEmail(email: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({ email, status: UserStatus.ACTIVE })
+      .exec() as Promise<UserDocument | null>;
+  }
+
+  async updatePasswordHash(
+    userId: string,
+    passwordHash: string,
+  ): Promise<boolean> {
+    if (!isValidObjectId(userId)) return false;
+    const result = await this.userModel.updateOne(
+      { _id: userId, status: UserStatus.ACTIVE },
+      { $set: { passwordHash } },
+    );
+    return result.modifiedCount === 1;
+  }
+
   async findActiveById(userId: string): Promise<UserDocument | null> {
     if (!isValidObjectId(userId)) {
       return null;

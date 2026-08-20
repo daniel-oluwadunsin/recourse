@@ -4,6 +4,12 @@ import { MongooseModule } from "@nestjs/mongoose";
 
 import { type EnvironmentConfig } from "@recourse/config";
 
+function optionalInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
 @Module({
   imports: [
     MongooseModule.forRootAsync({
@@ -18,12 +24,19 @@ import { type EnvironmentConfig } from "@recourse/config";
           );
         }
 
+        const maxPoolSize = optionalInteger(
+          config.get("MONGODB_MAX_POOL_SIZE"),
+        );
+        const minPoolSize = optionalInteger(
+          config.get("MONGODB_MIN_POOL_SIZE"),
+        );
+
         return {
           autoIndex: config.get("MONGODB_AUTO_INDEX") ?? false,
           connectTimeoutMS: config.get("MONGODB_CONNECT_TIMEOUT_MS") ?? 10000,
           dbName: config.get("MONGODB_DATABASE") ?? "recourse",
-          maxPoolSize: config.get("MONGODB_MAX_POOL_SIZE"),
-          minPoolSize: config.get("MONGODB_MIN_POOL_SIZE"),
+          ...(maxPoolSize === undefined ? {} : { maxPoolSize }),
+          ...(minPoolSize === undefined ? {} : { minPoolSize }),
           retryAttempts: 3,
           retryDelay: 1000,
           serverSelectionTimeoutMS:

@@ -22,6 +22,9 @@ export class ClaimSourceRef {
   location!: Record<string, unknown> | null;
 }
 
+export const ClaimSourceRefSchema =
+  SchemaFactory.createForClass(ClaimSourceRef);
+
 @Schema({ collection: "claims", timestamps: true })
 export class Claim {
   @Prop({ ref: "Case", required: true, type: SchemaTypes.ObjectId })
@@ -58,7 +61,7 @@ export class Claim {
   @Prop({ min: 0, max: 1, required: true, type: Number })
   confidence!: number;
 
-  @Prop({ default: [], type: [ClaimSourceRef] })
+  @Prop({ default: [], type: [ClaimSourceRefSchema] })
   sourceRefs!: ClaimSourceRef[];
 
   @Prop({ default: [], type: [String] })

@@ -16,6 +16,7 @@ import {
   Notification,
   ProfileCircle,
   Setting2,
+  SecuritySafe,
   Sun1,
   MenuBoard,
   LogoutCurve,
@@ -68,7 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Logo />
           </Link>
           <button
-            className="icon-button md:hidden"
+            className="icon-button mobile-nav-button"
             onClick={() => setOpen(false)}
             aria-label="Close navigation"
           >
@@ -109,6 +110,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/settings/security" className="nav-link">
             <Setting2 size={20} /> Settings
           </Link>
+          <Link href="/settings/data" className="nav-link">
+            <SecuritySafe size={20} /> Data & privacy
+          </Link>
           <button onClick={signOut} className="nav-link w-full">
             <LogoutCurve size={20} /> Sign out
           </button>
@@ -117,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className={`shell-content ${open ? "shell-content-dim" : ""}`}>
         <header className="topbar">
           <button
-            className="icon-button md:hidden"
+            className="icon-button mobile-nav-button"
             onClick={() => setOpen(true)}
             aria-label="Open navigation"
           >

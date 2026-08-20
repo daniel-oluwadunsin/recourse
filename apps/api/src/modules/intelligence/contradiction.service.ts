@@ -86,14 +86,37 @@ export class ContradictionService {
       if (!document) continue;
       discovered.push(document);
     }
+    const currentKeys = discovered.map((item) => item.candidateKey);
+    await this.contradictionModel
+      .updateMany(
+        {
+          caseId: caseDocument._id,
+          status: { $in: ["OPEN", "UNKNOWN"] },
+          ...(currentKeys.length > 0
+            ? { candidateKey: { $nin: currentKeys } }
+            : {}),
+        },
+        {
+          $set: {
+            explanation:
+              "The claims no longer form a material contradiction under the current normalized evidence.",
+            status: "EXPLAINABLE",
+          },
+        },
+      )
+      .exec();
+    const openContradictionCount = await this.contradictionModel.countDocuments(
+      {
+        caseId: caseDocument._id,
+        status: { $in: ["OPEN", "UNKNOWN"] },
+      },
+    );
     await this.caseModel
       .updateOne(
         { _id: caseDocument._id, deletedAt: null },
         {
           $set: {
-            contradictionCount: discovered.filter((item) =>
-              ["OPEN", "UNKNOWN"].includes(item.status),
-            ).length,
+            contradictionCount: openContradictionCount,
           },
         },
       )
@@ -231,7 +254,7 @@ export class ContradictionService {
   }
 }
 
-function candidatePairs(
+export function candidatePairs(
   claims: ClaimDocument[],
 ): Array<[ClaimDocument, ClaimDocument]> {
   const output: Array<[ClaimDocument, ClaimDocument]> = [];
@@ -240,20 +263,54 @@ function candidatePairs(
       const claimA = claims[left];
       const claimB = claims[right];
       if (!claimA || !claimB) continue;
+      const leftSources = new Set(
+        claimA.sourceRefs.map(
+          (source) => `${source.sourceType}:${source.sourceId}`,
+        ),
+      );
+      if (
+        claimB.sourceRefs.some((source) =>
+          leftSources.has(`${source.sourceType}:${source.sourceId}`),
+        )
+      )
+        continue;
       if (
         claimA.normalizedType &&
         claimA.normalizedType === claimB.normalizedType &&
-        claimA.normalizedValue &&
-        claimB.normalizedValue &&
-        claimA.normalizedValue !== claimB.normalizedValue
+        materiallyDifferentNormalizedValues(claimA, claimB)
       ) {
-        output.push([claimA, claimB]);
-      } else if (!claimA.normalizedType && !claimB.normalizedType) {
         output.push([claimA, claimB]);
       }
     }
   }
   return output;
+}
+
+function materiallyDifferentNormalizedValues(
+  claimA: ClaimDocument,
+  claimB: ClaimDocument,
+): boolean {
+  if (!claimA.normalizedValue || !claimB.normalizedValue) return false;
+  if (claimA.normalizedType === "DATE") {
+    const left = normalizedDateValue(claimA.normalizedValue);
+    const right = normalizedDateValue(claimB.normalizedValue);
+    return left !== null && right !== null && left !== right;
+  }
+  return (
+    claimA.normalizedValue.trim().toLowerCase() !==
+    claimB.normalizedValue.trim().toLowerCase()
+  );
+}
+
+function normalizedDateValue(value: string): string | null {
+  const match = value.match(
+    /(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}/iu,
+  );
+  if (!match) return null;
+  const parsed = new Date(match[0]);
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : parsed.toISOString().slice(0, 10);
 }
 
 function contradictionKind(

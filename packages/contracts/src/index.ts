@@ -405,11 +405,27 @@ export const evidenceErrorCodeValues = [
   "PAGE_LIMIT_EXCEEDED",
   "PIXEL_LIMIT_EXCEEDED",
   "UNSUPPORTED_FORMAT",
+  "MALWARE_DETECTED",
+  "MALWARE_SCAN_FAILED",
   "DELETION_FAILED",
 ] as const;
 
 export const evidenceErrorCodeSchema = z.enum(evidenceErrorCodeValues);
 export type EvidenceErrorCode = z.infer<typeof evidenceErrorCodeSchema>;
+
+export const evidenceMalwareScanStatusValues = [
+  "PENDING",
+  "CLEAN",
+  "SKIPPED",
+  "INFECTED",
+  "FAILED",
+] as const;
+export const evidenceMalwareScanStatusSchema = z.enum(
+  evidenceMalwareScanStatusValues,
+);
+export type EvidenceMalwareScanStatus = z.infer<
+  typeof evidenceMalwareScanStatusSchema
+>;
 
 export const deadlineTypeValues = [
   "APPEAL",

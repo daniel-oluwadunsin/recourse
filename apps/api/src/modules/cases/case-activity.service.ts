@@ -128,7 +128,9 @@ function parseLastEventId(value: string | undefined): number {
     return 0;
   }
   const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 1_000_000_000
+    ? parsed
+    : 0;
 }
 
 function formatSseEvent(event: {

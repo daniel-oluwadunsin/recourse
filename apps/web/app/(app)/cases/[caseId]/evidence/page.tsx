@@ -3,11 +3,13 @@
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { apiFetch } from "../../../../../lib/api";
+import { EvidenceUploader } from "../../../../../components/evidence-uploader";
 import {
   useDeleteEvidence,
   useEvidence,
   useEvidenceBlocks,
   useClaims,
+  useVerifyEvidenceClaims,
 } from "../../../../../lib/queries";
 import type { Evidence } from "../../../../../lib/types";
 import {
@@ -22,7 +24,6 @@ import {
   Card,
   EmptyState,
   ErrorState,
-  LinkButton,
   LoadingState,
   Notice,
   PageHeader,
@@ -103,6 +104,7 @@ function EvidenceDetail({
 }) {
   const blocks = useEvidenceBlocks(caseId, evidence.id);
   const remove = useDeleteEvidence(caseId);
+  const verifyClaims = useVerifyEvidenceClaims(caseId);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const download = async () => {
     setDownloadError(null);
@@ -158,6 +160,15 @@ function EvidenceDetail({
         >
           <Eye size={17} /> Open private copy
         </Button>
+        {evidence.processingStatus === "READY" ? (
+          <Button
+            variant="secondary"
+            loading={verifyClaims.isPending}
+            onClick={() => verifyClaims.mutate(evidence.id)}
+          >
+            Confirm extraction matches document
+          </Button>
+        ) : null}
         <Button
           variant="danger"
           onClick={deleteEvidence}
@@ -169,6 +180,23 @@ function EvidenceDetail({
       {downloadError ? (
         <div className="mt-4">
           <Notice tone="danger">{downloadError}</Notice>
+        </div>
+      ) : null}
+      {verifyClaims.isSuccess ? (
+        <div className="mt-4">
+          <Notice tone="success">
+            Confirmed {verifyClaims.data.verifiedClaimCount} extracted claim(s)
+            against this document. This does not verify external truth.
+          </Notice>
+        </div>
+      ) : null}
+      {verifyClaims.isError ? (
+        <div className="mt-4">
+          <Notice tone="warning">
+            {verifyClaims.error instanceof Error
+              ? verifyClaims.error.message
+              : "Claim confirmation failed."}
+          </Notice>
         </div>
       ) : null}
       {evidence.processingErrorCode ? (
@@ -230,6 +258,7 @@ export default function EvidencePage() {
   const { caseId } = useParams<{ caseId: string }>();
   const query = useEvidence(caseId);
   const [selected, setSelected] = useState<Evidence | null>(null);
+  const [showUploader, setShowUploader] = useState(false);
   if (query.isLoading) return <LoadingState label="Loading evidence" />;
   if (query.isError)
     return (
@@ -250,16 +279,31 @@ export default function EvidencePage() {
         title="Evidence ledger"
         description="Private files, processing status, hashes, and extracted text with block/page provenance."
         action={
-          <LinkButton href="/cases/new">
+          <Button type="button" onClick={() => setShowUploader(true)}>
             <Upload size={17} /> Add evidence
-          </LinkButton>
+          </Button>
         }
       />
+      {showUploader ? (
+        <EvidenceUploader
+          caseId={caseId}
+          onCancel={() => setShowUploader(false)}
+          onComplete={(evidence) => {
+            setSelected(evidence);
+            setShowUploader(false);
+            void query.refetch();
+          }}
+        />
+      ) : null}
       {items.length === 0 ? (
         <EmptyState
           title="No evidence attached"
-          description="Upload the decision notice, supporting document, email, text, or screenshot from intake."
-          action={<LinkButton href="/cases/new">Upload evidence</LinkButton>}
+          description="Upload a decision notice, supporting document, email, text, or screenshot directly to this case."
+          action={
+            <Button type="button" onClick={() => setShowUploader(true)}>
+              Upload evidence
+            </Button>
+          }
         />
       ) : (
         <>

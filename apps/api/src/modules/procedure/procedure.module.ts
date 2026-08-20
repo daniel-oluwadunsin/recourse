@@ -5,6 +5,7 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { CasesModule } from "../cases/cases.module";
 import { AuthModule } from "../auth/auth.module";
 import { Case, CaseSchema } from "../cases/schemas/case.schema";
+import { CaseEvent, CaseEventSchema } from "../cases/schemas/case-event.schema";
 import { Decision, DecisionSchema } from "../cases/schemas/decision.schema";
 import {
   Institution,
@@ -50,6 +51,7 @@ import {
     EmbeddingsModule,
     MongooseModule.forFeature([
       { name: Case.name, schema: CaseSchema },
+      { name: CaseEvent.name, schema: CaseEventSchema },
       { name: Decision.name, schema: DecisionSchema },
       { name: Institution.name, schema: InstitutionSchema },
       { name: RetrievalRun.name, schema: RetrievalRunSchema },

@@ -24,6 +24,7 @@ import { Decision } from "../cases/schemas/decision.schema";
 import { Evidence } from "../evidence/schemas/evidence.schema";
 import { EvidenceBlock } from "../evidence/schemas/evidence-block.schema";
 import { AIOperationService, hashInput } from "./ai-operation.service";
+import { AIProviderError } from "./ai.types";
 import {
   type ClassifyCaseInput,
   type ExtractDocumentClaimsInput,
@@ -33,6 +34,7 @@ import { Claim } from "../intelligence/schemas/claim.schema";
 import { ProceduralClaim } from "../procedure/schemas/procedural-claim.schema";
 import { ProcedureVersion } from "../procedure/schemas/procedure-version.schema";
 import { CaseResponse } from "../email/schemas/case-response.schema";
+import { UsageBudgetExceededError } from "../../common/security/usage-budget.service";
 
 export class AIJobDomainError extends Error {
   constructor(
@@ -98,6 +100,36 @@ export class AIJobService {
               parsed.correlationId,
             );
           } catch (error: unknown) {
+            if (error instanceof UsageBudgetExceededError) {
+              const current = await this.caseModel
+                .findOne({
+                  _id: new Types.ObjectId(parsed.caseId),
+                  deletedAt: null,
+                })
+                .exec();
+              if (
+                current?.status === "CASE_ANALYSIS" &&
+                current.revision === parsed.expectedRevision
+              ) {
+                await this.stateMachine.transition(
+                  parsed.caseId,
+                  "NEEDS_HUMAN",
+                  {
+                    actorId: null,
+                    actorType: "SYSTEM",
+                    correlationId: parsed.correlationId ?? undefined,
+                  },
+                  {
+                    eventType: "CASE_NEEDS_HUMAN",
+                    expectedCurrent: ["CASE_ANALYSIS"],
+                    expectedRevision: current.revision,
+                    idempotencyKey: `case-analysis-budget-exhausted-${parsed.caseId}-${current.revision}`,
+                    payload: { reason: "SAFETY_BUDGET_EXHAUSTED" },
+                  },
+                );
+              }
+              return { status: "budget-exhausted" };
+            }
             if (
               error instanceof ConflictException ||
               error instanceof NotFoundException
@@ -439,7 +471,33 @@ export class AIJobService {
       decisionType: decision.decisionType,
     };
     assertInputHash(payload, input);
-    const result = await this.operationService.classifyCase(input);
+    let result: Awaited<ReturnType<AIOperationService["classifyCase"]>>;
+    try {
+      result = await this.operationService.classifyCase(input);
+    } catch (error: unknown) {
+      if (error instanceof AIProviderError && !error.retryable) {
+        await this.stateMachine.transition(
+          caseDocument._id.toString(),
+          "NEEDS_HUMAN",
+          {
+            actorId: null,
+            actorType: "SYSTEM",
+            correlationId: payload.correlationId ?? undefined,
+          },
+          {
+            eventType: "CASE_NEEDS_HUMAN",
+            expectedCurrent: ["CLASSIFYING"],
+            expectedRevision: payload.expectedRevision ?? undefined,
+            idempotencyKey: `${payload.idempotencyKey}-needs-human`,
+            payload: {
+              errorCode: error.code,
+              operation: payload.operation,
+            },
+          },
+        );
+      }
+      throw error;
+    }
     const transition = await this.stateMachine.transition(
       caseDocument._id.toString(),
       "PROCEDURE_RESOLUTION",

@@ -1,9 +1,13 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { type AIRunDocument } from "./schemas/ai-run.schema";
 import { AIRunService } from "./ai-run.service";
+import { type EnvironmentConfig } from "@recourse/config";
+import { ApplicationObservabilityService } from "../../common/observability.service";
+import { UsageBudgetService } from "../../common/security/usage-budget.service";
 import { AIModelRouterService } from "./model-router.service";
 import { AIProviderError } from "./ai.types";
 import {
@@ -52,7 +56,7 @@ import { extractTimelineEventsPrompt } from "./prompts/extract-timeline-events.v
 import { extractProcedurePrompt } from "./prompts/extract-procedure.v1";
 import { verifyProceduralClaimPrompt } from "./prompts/verify-procedural-claim.v1";
 import { detectClaimConflictsPrompt } from "./prompts/detect-claim-conflicts.v1";
-import { analyzeCasePrompt } from "./prompts/analyze-case.v1";
+import { analyzeCasePrompt } from "./prompts/analyze-case.v2";
 import { analyzeResponsePrompt } from "./prompts/analyze-response.v1";
 import { replanCasePrompt } from "./prompts/replan-case.v1";
 
@@ -67,6 +71,10 @@ export class AIOperationService {
     private readonly provider: GroqProvider,
     private readonly router: AIModelRouterService,
     private readonly runs: AIRunService,
+    @Optional() private readonly budget?: UsageBudgetService,
+    @Optional()
+    private readonly observability?: ApplicationObservabilityService,
+    @Optional() private readonly config?: ConfigService<EnvironmentConfig>,
   ) {}
 
   async classifyCase(
@@ -157,37 +165,94 @@ export class AIOperationService {
         source.paragraphs.map((paragraph) => paragraph.paragraphId),
       ),
     );
-    return this.execute(
-      definition,
-      parsed,
-      [
-        parsed.caseId,
-        ...parsed.sources.map((source) => source.sourceSnapshotId),
-      ],
-      extractProcedurePrompt.buildMessages(JSON.stringify(parsed)),
-      extractProcedureOutputSchema,
-      null,
-      (output) => {
-        for (const claim of output.claims) {
-          assertRefsAreSubset(claim.paragraphIds, allowed);
-          if (
-            !parsed.sources.some(
-              (source) => source.sourceSnapshotId === claim.sourceSnapshotId,
-            )
-          ) {
-            throw new AIProviderError(
-              "Procedure output referenced an unknown source.",
-              "OUTPUT_PROVENANCE_INVALID",
-              false,
-            );
-          }
-        }
-        for (const step of output.steps)
-          assertRefsAreSubset(step.paragraphIds, allowed);
-        for (const deadline of output.deadlines)
-          assertRefsAreSubset(deadline.paragraphIds, allowed);
-      },
+    const inputRefs = [
+      parsed.caseId,
+      ...parsed.sources.map((source) => source.sourceSnapshotId),
+    ];
+    const messages = extractProcedurePrompt.buildMessages(
+      JSON.stringify(parsed),
     );
+    const validate = (output: ExtractProcedureOutput) => {
+      for (const claim of output.claims) {
+        assertRefsAreSubset(claim.paragraphIds, allowed);
+        if (
+          !parsed.sources.some(
+            (source) => source.sourceSnapshotId === claim.sourceSnapshotId,
+          )
+        ) {
+          throw new AIProviderError(
+            "Procedure output referenced an unknown source.",
+            "OUTPUT_PROVENANCE_INVALID",
+            false,
+          );
+        }
+      }
+      for (const step of output.steps)
+        assertRefsAreSubset(step.paragraphIds, allowed);
+      for (const deadline of output.deadlines)
+        assertRefsAreSubset(deadline.paragraphIds, allowed);
+    };
+
+    try {
+      return await this.execute(
+        definition,
+        parsed,
+        inputRefs,
+        messages,
+        extractProcedureOutputSchema,
+        null,
+        validate,
+      );
+    } catch (error: unknown) {
+      if (
+        !(error instanceof AIProviderError) ||
+        ![
+          "AI_INPUT_TOO_LARGE",
+          "GROQ_STRUCTURED_OUTPUT_REJECTED",
+          "OUTPUT_PROVENANCE_INVALID",
+          "PROVIDER_SCHEMA_MISMATCH",
+        ].includes(error.code)
+      ) {
+        throw error;
+      }
+
+      // A single constrained repair attempt is safer and cheaper than sending
+      // an otherwise recoverable model formatting error straight to a person.
+      // The second run is independently audited and passes the same validator.
+      const allowedReferences = parsed.sources.map((source) => ({
+        sourceSnapshotId: source.sourceSnapshotId,
+        paragraphIds: source.paragraphs.map(
+          (paragraph) => paragraph.paragraphId,
+        ),
+      }));
+      const repairDefinition = {
+        ...definition,
+        // A strict-output rejection from the fast extraction model is a model
+        // capability failure, not a reason to stop the case for a person. Use
+        // the configured reasoning model for the one bounded repair attempt.
+        modelPurpose: "REASONING" as const,
+        maxCompletionTokens: 4_000,
+      };
+      return this.execute(
+        repairDefinition,
+        parsed,
+        inputRefs,
+        [
+          ...messages,
+          {
+            role: "user",
+            content: [
+              "The previous attempt failed schema or provenance validation.",
+              "Return a fresh result. Copy references only from this exact allowlist; omit unsupported items:",
+              JSON.stringify(allowedReferences),
+            ].join("\n"),
+          },
+        ],
+        extractProcedureOutputSchema,
+        null,
+        validate,
+      );
+    }
   }
 
   async verifyProceduralClaim(
@@ -355,6 +420,20 @@ export class AIOperationService {
     const inputHash = hashInput(
       imageUrl && isRecord(input) ? { ...input, imageUrl: null } : input,
     );
+    const serializedInput = JSON.stringify(input);
+    if (
+      serializedInput.length >
+      (this.config?.get("AI_MAX_INPUT_CHARS") ?? 100000)
+    ) {
+      throw new AIProviderError(
+        "AI input exceeded the configured safety bound.",
+        "AI_INPUT_TOO_LARGE",
+        false,
+      );
+    }
+    if (this.budget && inputRefs[0]) {
+      await this.budget.consumeAiCase(inputRefs[0]);
+    }
     const reasoningEffort = imageUrl ? "none" : this.router.reasoningEffort();
     const model = this.router.modelFor(
       imageUrl ? "VISION" : definition.modelPurpose,
@@ -397,9 +476,27 @@ export class AIOperationService {
         providerRequestId: result.providerRequestId,
         usage: result.usage,
       });
+      this.observability?.metrics.increment("recourse_ai_operations_total", {
+        operation: definition.name,
+        status: "succeeded",
+      });
+      this.observability?.metrics.observe(
+        "recourse_ai_operation_latency_ms",
+        result.latencyMs,
+        { operation: definition.name },
+      );
+      this.observability?.metrics.increment(
+        "recourse_ai_tokens_total",
+        { operation: definition.name, model },
+        result.usage.totalTokens,
+      );
       return { output: outputSchema.parse(result.output), run };
     } catch (error: unknown) {
       await this.runs.fail(run, error);
+      this.observability?.metrics.increment("recourse_ai_operations_total", {
+        operation: definition.name,
+        status: "failed",
+      });
       throw error;
     }
   }

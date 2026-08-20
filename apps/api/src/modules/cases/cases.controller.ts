@@ -13,10 +13,12 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { type Request, type Response } from "express";
 
 import { getRequestContext } from "@recourse/logger";
 
+import { configuredRateLimit } from "../../common/security/rate-limit";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { AccessTokenGuard } from "../auth/guards/access-token.guard";
 import { type AuthenticatedUser } from "../auth/auth.types";
@@ -41,6 +43,12 @@ export class CasesController {
   ) {}
 
   @Post()
+  @Throttle({
+    default: {
+      limit: () => configuredRateLimit("CASE_CREATE_RATE_LIMIT"),
+      ttl: 3600000,
+    },
+  })
   async create(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() body: CreateCaseDto,

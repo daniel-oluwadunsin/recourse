@@ -297,6 +297,7 @@ async function createAndVerifyIndexes(): Promise<void> {
         definition.schema,
         definition.collection,
       );
+      await migrateKnownLegacyIndexes(model.collection, definition.collection);
       await model.createIndexes();
 
       const actualIndexes = await model.collection.listIndexes().toArray();
@@ -322,6 +323,32 @@ async function createAndVerifyIndexes(): Promise<void> {
   } finally {
     await connection.close();
   }
+}
+
+async function migrateKnownLegacyIndexes(
+  collection: mongoose.Collection,
+  collectionName: string,
+): Promise<void> {
+  if (collectionName !== "case_email_tokens") return;
+  const indexes = await collection.listIndexes().toArray();
+  const canonical = indexes.find(
+    (index) => index.name === "case_email_tokens_hash_unique",
+  );
+  const legacy = indexes.find((index) => index.name === "tokenHash_1");
+  if (canonical || !legacy) return;
+  const legacyKey = JSON.stringify(legacy.key);
+  if (
+    legacyKey !== JSON.stringify({ tokenHash: 1 }) ||
+    legacy.unique !== true
+  ) {
+    throw new Error(
+      "case_email_tokens legacy tokenHash_1 index has an unexpected definition; inspect it manually before migration.",
+    );
+  }
+  await collection.dropIndex("tokenHash_1");
+  process.stdout.write(
+    "case_email_tokens: removed equivalent legacy index tokenHash_1; creating canonical index\n",
+  );
 }
 
 void createAndVerifyIndexes().catch((error: unknown) => {

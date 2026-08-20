@@ -37,6 +37,12 @@ describe("CaseStateMachineService", () => {
     expect(service.canTransition("SUBMITTED", "RESOLVED")).toBe(false);
     expect(service.canTransition("RESOLVED", "INTAKE")).toBe(false);
     expect(service.canTransition("EXHAUSTED", "REPLANNING")).toBe(false);
-    expect(service.canTransition("NEEDS_HUMAN", "READY_TO_APPEAL")).toBe(false);
+    expect(service.canTransition("NEEDS_HUMAN", "READY_TO_APPEAL")).toBe(true);
+    expect(service.canTransition("READY_TO_APPEAL", "CASE_ANALYSIS")).toBe(
+      true,
+    );
+    expect(service.canTransition("NEEDS_HUMAN", "PROCEDURE_RESOLUTION")).toBe(
+      true,
+    );
   });
 });

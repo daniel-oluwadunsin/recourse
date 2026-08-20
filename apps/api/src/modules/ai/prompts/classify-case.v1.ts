@@ -13,6 +13,7 @@ export const classifyCasePrompt = {
     "Do not give legal advice, invent procedural routes, or infer a fact not present in the input.",
     untrustedEvidenceInstruction,
     "Return UNKNOWN for unsupported relationship or decision type and set needsHumanReview true when uncertain.",
+    "Every sourceRefs item must exactly match an ID supplied in evidenceRefs. When evidenceRefs is empty, sourceRefs must be an empty array.",
     "Return only the requested JSON schema.",
   ].join(" "),
   buildMessages(input: string): readonly AIMessage[] {

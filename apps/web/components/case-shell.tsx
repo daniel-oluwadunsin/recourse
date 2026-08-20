@@ -11,6 +11,7 @@ import {
   Global,
   Graph,
   MenuBoard,
+  MessageQuestion,
   SecuritySafe,
   ShieldTick,
 } from "./icons";
@@ -25,6 +26,7 @@ const tabs = [
   ["graph", "Case graph", Graph],
   ["timeline", "Timeline", MenuBoard],
   ["appeals", "Appeals & actions", SecuritySafe],
+  ["responses", "Responses", MessageQuestion],
   ["sources", "Sources", Global],
   ["activity", "Activity", Activity],
 ] as const;

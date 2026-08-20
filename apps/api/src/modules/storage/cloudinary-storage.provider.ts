@@ -151,9 +151,10 @@ export class CloudinaryStorageProvider implements StorageProvider {
       );
     }
 
+    const format = storageKey.slice(storageKey.lastIndexOf(".") + 1);
     return {
       expiresAt,
-      url: cloudinary.utils.private_download_url(storageKey, "bin", {
+      url: cloudinary.utils.private_download_url(storageKey, format, {
         attachment: false,
         expires_at: expiry,
         resource_type: "raw",
@@ -294,10 +295,21 @@ function isCloudinaryNotFound(error: unknown): boolean {
     return false;
   }
 
-  const candidate = error as { http_code?: unknown; message?: unknown };
+  const candidate = error as {
+    error?: { http_code?: unknown; message?: unknown };
+    http_code?: unknown;
+    message?: unknown;
+  };
+  const nested = candidate.error;
+  const message =
+    typeof candidate.message === "string"
+      ? candidate.message
+      : typeof nested?.message === "string"
+        ? nested.message
+        : "";
   return (
     candidate.http_code === 404 ||
-    (typeof candidate.message === "string" &&
-      candidate.message.toLowerCase().includes("not found"))
+    nested?.http_code === 404 ||
+    message.toLowerCase().includes("not found")
   );
 }

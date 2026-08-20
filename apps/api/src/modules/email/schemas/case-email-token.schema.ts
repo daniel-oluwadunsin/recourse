@@ -9,7 +9,7 @@ export class CaseEmailToken {
   @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User" })
   ownerId!: Types.ObjectId;
 
-  @Prop({ required: true, type: String, unique: true })
+  @Prop({ required: true, type: String })
   tokenHash!: string;
 
   @Prop({ required: true, type: String })
