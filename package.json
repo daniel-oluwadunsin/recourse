@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:providers": "TSX_TSCONFIG_PATH=apps/api/tsconfig.json node --env-file=.env --import tsx apps/api/scripts/provider-smoke.ts",
-    "build": "dotenv -e .env -- pnpm --filter @recourse/shared build && pnpm --filter api build && pnpm --filter web build",
+    "build": "pnpm --filter @recourse/shared build && pnpm --filter api build && pnpm --filter web build",
     "start": "dotenv -e .env -- concurrently -k -n api,web -c blue,red \"pnpm --filter api start\" \"pnpm --filter web start\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
