@@ -24,7 +24,7 @@ Read:
 
 - every repository Markdown file relevant to the project;
 - especially the PRD and technical specification;
-- the existing `design.md`;
+- the existing `docs/design.md`;
 - the existing `.env` variable names without exposing values.
 
 Do not write code before understanding the complete product.
@@ -128,7 +128,7 @@ The `.env` belongs to the user.
 
 ## UX
 
-`design.md` is the visual authority.
+`docs/design.md` is the visual authority.
 
 The whole product should feel Awwwards-caliber, not like a default dashboard.
 
@@ -160,7 +160,7 @@ Do not interrupt for routine engineering choices.
 
 Ask only if truly blocked by:
 
-- missing `design.md`;
+- missing `docs/design.md`;
 - missing required credentials that cannot be worked around;
 - contradictory product requirements;
 - an irreversible user action;

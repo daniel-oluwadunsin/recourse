@@ -1,0 +1,11 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+allowBuilds:
+  '@google/genai': true
+  argon2: true
+  esbuild: true
+  mongodb-memory-server: true
+  protobufjs: true
+  unrs-resolver: true

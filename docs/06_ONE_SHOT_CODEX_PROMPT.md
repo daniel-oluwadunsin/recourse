@@ -24,12 +24,12 @@ Before writing code:
    - `03_ENVIRONMENT_AND_PROVIDER_NOTES.md`
    - `04_TEST_AND_ACCEPTANCE_PLAN.md`
    - `05_CODEX_TOOLING.md`
-   - **`design.md`**
+   - **`docs/design.md`**
 4. inspect the existing `.env` variable names without printing secret values;
 5. understand that I deleted the prior project code and am rebuilding, so the `.env` may contain stale credentials/integrations;
 6. internally summarize the product and architecture before making files.
 
-`design.md` is the visual/interaction design authority.
+`docs/design.md` is the visual/interaction design authority.
 
 If the repository is effectively empty apart from docs/design/env, initialize it cleanly.
 
@@ -468,7 +468,7 @@ This is extremely important.
 
 The landing page **and entire product UI** must look and feel like a high-end **Awwwards-caliber** digital product.
 
-Follow `design.md` faithfully.
+Follow `docs/design.md` faithfully.
 
 Do NOT give me:
 
@@ -630,7 +630,7 @@ At minimum inspect:
 
 Walk all critical states from landing through continued case.
 
-Compare against `design.md`.
+Compare against `docs/design.md`.
 
 Look for and FIX:
 
@@ -698,13 +698,17 @@ Ensure:
 Your final response must contain:
 
 ### What you built
+
 Plain-language summary.
 
 ### Repository structure
+
 Important folders/files.
 
 ### Existing `.env` cleanup
+
 List:
+
 - variables kept;
 - variables added;
 - stale variable names removed.
@@ -712,10 +716,13 @@ List:
 Never reveal values.
 
 ### Every required env variable
+
 Grouped logically.
 
 ### Provider setup
+
 Exact steps for:
+
 - Gemini
 - Tavily
 - MongoDB
@@ -724,28 +731,37 @@ Exact steps for:
 Use current official docs.
 
 ### Free-tier notes
+
 Tell me:
+
 - practical Gemini limits/data-policy considerations;
 - Tavily credit behavior;
 - any Cloudinary/Mongo limits relevant to the MVP.
 
 ### How to run locally
+
 Exact clean commands.
 
 ### How the product works
+
 Full flow from case creation to response continuation.
 
 ### Manual test
+
 Exact steps I should perform.
 
 ### Test results
+
 List commands actually run and pass/fail results.
 
 ### Visual QA performed
+
 Tell me which screens/viewports you inspected and what you fixed.
 
 ### Known limitations
+
 Be explicit:
+
 - Recourse does not submit for users;
 - no automated external monitoring;
 - procedure research can be incomplete;

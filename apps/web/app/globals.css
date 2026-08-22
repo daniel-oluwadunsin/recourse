@@ -1,0 +1,282 @@
+@import '@fontsource/kalam/400.css';
+@import '@fontsource/kalam/700.css';
+@import '@fontsource/patrick-hand/400.css';
+@import 'tailwindcss';
+
+:root {
+  --paper: #fdfbf7;
+  --paper-deep: #f3eee4;
+  --old-paper: #e5e0d8;
+  --ink: #2d2d2d;
+  --muted: #716c64;
+  --red: #e94242;
+  --red-dark: #b9272d;
+  --blue: #2d5da1;
+  --blue-dark: #173b6d;
+  --yellow: #f6d96b;
+  --green: #3b7656;
+  --line: rgba(45, 45, 45, 0.18);
+  --shadow: 5px 6px 0 #2d2d2d;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+  background: var(--paper);
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image: radial-gradient(
+    rgba(45, 45, 45, 0.105) 0.7px,
+    transparent 0.7px
+  );
+  background-size: 18px 18px;
+  font-family: 'Patrick Hand', ui-rounded, system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+::selection {
+  background: var(--yellow);
+}
+
+:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}
+
+.font-display {
+  font-family: 'Kalam', cursive;
+}
+.page-shell {
+  width: min(1180px, calc(100% - 40px));
+  margin-inline: auto;
+}
+.paper-panel {
+  background: rgba(253, 251, 247, 0.94);
+  border: 2px solid var(--ink);
+  border-radius: 4px 14px 6px 12px;
+  box-shadow: var(--shadow);
+}
+.paper-soft {
+  background: rgba(253, 251, 247, 0.88);
+  border: 1.5px solid rgba(45, 45, 45, 0.65);
+  border-radius: 8px 4px 10px 5px;
+}
+.paper-button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.1rem;
+  border: 2px solid var(--ink);
+  border-radius: 5px 11px 6px 9px;
+  background: var(--paper);
+  box-shadow: 3px 4px 0 var(--ink);
+  font-family: 'Kalam', cursive;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
+}
+.paper-button:hover {
+  transform: translate(-1px, -1px) rotate(-0.25deg);
+  box-shadow: 5px 6px 0 var(--ink);
+}
+.paper-button:active {
+  transform: translate(3px, 4px);
+  box-shadow: 0 0 0 var(--ink);
+}
+.paper-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.paper-button.primary {
+  background: var(--red);
+  color: #fffdf8;
+}
+.paper-button.blue {
+  background: var(--blue);
+  color: #fff;
+}
+.paper-button.quiet {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+.paper-button.quiet:hover {
+  color: var(--red-dark);
+  box-shadow: none;
+}
+.paper-button.danger {
+  color: var(--red-dark);
+}
+
+.field-label {
+  display: block;
+  font-family: 'Kalam';
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+.paper-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.75rem 0.9rem;
+  border: 2px solid var(--ink);
+  border-radius: 7px 4px 9px 5px;
+  background: #fffefb;
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 rgba(45, 45, 45, 0.08);
+}
+textarea.paper-input {
+  resize: vertical;
+  line-height: 1.4;
+}
+.paper-input::placeholder {
+  color: #817c74;
+}
+.paper-input:focus {
+  outline: 3px solid rgba(45, 93, 161, 0.28);
+  outline-offset: 2px;
+}
+
+.eyebrow {
+  font-family: 'Kalam', cursive;
+  font-size: 0.83rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--red-dark);
+}
+.scribble-underline {
+  position: relative;
+  display: inline-block;
+}
+.scribble-underline::after {
+  content: '';
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: 0.02em;
+  height: 9px;
+  z-index: -1;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 8 C45 1 78 11 119 5 S170 9 198 3' fill='none' stroke='%23f6d96b' stroke-width='7' stroke-linecap='round' opacity='.9'/%3E%3C/svg%3E")
+    center/100% 100% no-repeat;
+}
+.tape {
+  position: relative;
+}
+.tape::before {
+  content: '';
+  position: absolute;
+  width: 74px;
+  height: 24px;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  background: rgba(246, 217, 107, 0.68);
+  border-left: 1px dashed rgba(45, 45, 45, 0.25);
+  border-right: 1px dashed rgba(45, 45, 45, 0.25);
+}
+.status-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--blue);
+  display: inline-block;
+  box-shadow: 0 0 0 3px rgba(45, 93, 161, 0.12);
+}
+.status-dot.ready {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(59, 118, 86, 0.15);
+}
+.status-dot.waiting {
+  background: #bc7a17;
+  box-shadow: 0 0 0 3px rgba(188, 122, 23, 0.15);
+}
+.status-dot.error {
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(233, 66, 66, 0.15);
+}
+
+.sketch-rule {
+  height: 8px;
+  width: 100%;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 600 8' preserveAspectRatio='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4 C120 0 190 8 300 3 S490 7 599 2' fill='none' stroke='%232d2d2d' stroke-width='1.5' opacity='.65'/%3E%3C/svg%3E")
+    center/100% 100% no-repeat;
+}
+
+.spinner-scribble {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(45, 45, 45, 0.18);
+  border-top-color: var(--red);
+  border-radius: 48% 52% 45% 55%;
+  animation: scribble-spin 0.8s linear infinite;
+}
+@keyframes scribble-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) rotate(-0.4deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+.settle-in {
+  animation: settle-in 0.35s ease-out both;
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 17px;
+  }
+  .page-shell {
+    width: min(100% - 24px, 1180px);
+  }
+  .paper-panel {
+    box-shadow: 3px 4px 0 var(--ink);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

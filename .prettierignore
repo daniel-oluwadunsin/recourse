@@ -1,0 +1,11 @@
+.agents/
+docs/
+AGENTS.md
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
+apps/web/next-env.d.ts
+node_modules/
+.next/
+dist/
+playwright-report/
+test-results/

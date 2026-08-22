@@ -603,7 +603,7 @@ The whole experience — including landing page and app — should feel like a p
 Avoid:
 
 - generic shadcn dashboard;
-- left-sidebar enterprise CRUD look unless `design.md` calls for it;
+- left-sidebar enterprise CRUD look unless `docs/design.md` calls for it;
 - generic gradient AI landing page;
 - giant chat box as the whole product;
 - excessive cards;

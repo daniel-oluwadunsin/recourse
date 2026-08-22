@@ -23,7 +23,7 @@ recourse/
 │   └── shared/          # only genuinely shared types/schemas
 ├── .env                 # existing; inspect/clean safely
 ├── .env.example
-├── design.md
+├── docs/design.md
 ├── AGENTS.md
 ├── pnpm-workspace.yaml
 └── package.json
@@ -40,7 +40,7 @@ recourse/
 - React Hook Form
 - Zod
 - TanStack Query
-- Framer Motion or Motion only if `design.md` benefits from it
+- Framer Motion or Motion only if `docs/design.md` benefits from it
 - Playwright for E2E/visual flow testing
 
 ### Main routes
@@ -86,7 +86,7 @@ Technical details live behind progressive disclosure.
 
 The landing page and authenticated product must feel like a cohesive premium experience.
 
-Implement against `design.md`.
+Implement against `docs/design.md`.
 
 Codex must not settle for default shadcn styling.
 
@@ -177,11 +177,7 @@ Do not add organization RBAC.
 
 ```ts
 {
-  _id,
-  email,
-  passwordHash,
-  createdAt,
-  updatedAt
+  (_id, email, passwordHash, createdAt, updatedAt);
 }
 ```
 
@@ -467,12 +463,14 @@ const CaseUnderstandingSchema = z.object({
   amountAffected: z.number().nullable(),
   currency: z.string().nullable(),
   summary: z.string(),
-  criticalUnknowns: z.array(z.object({
-    field: z.string(),
-    questionForUser: z.string()
-  })),
+  criticalUnknowns: z.array(
+    z.object({
+      field: z.string(),
+      questionForUser: z.string(),
+    }),
+  ),
   highStakes: z.boolean(),
-  highStakesReason: z.string().nullable()
+  highStakesReason: z.string().nullable(),
 });
 ```
 
