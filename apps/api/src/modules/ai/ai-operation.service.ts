@@ -137,22 +137,72 @@ export class AIOperationService {
   ): Promise<AIOperationResult<ExtractTimelineEventsOutput>> {
     const parsed = extractTimelineEventsInputSchema.parse(input);
     const definition = aiOperationRegistry["extract-timeline-events"];
-    return this.execute(
-      definition,
-      parsed,
-      [parsed.caseId, ...parsed.evidenceRefs.map((block) => block.blockId)],
-      extractTimelineEventsPrompt.buildMessages(JSON.stringify(parsed)),
-      extractTimelineEventsOutputSchema,
-      null,
-      (output) => {
-        const allowed = new Set(
-          parsed.evidenceRefs.map((block) => block.blockId),
-        );
-        for (const event of output.events) {
-          assertRefsAreSubset(event.evidenceBlockIds, allowed);
-        }
-      },
+    const inputRefs = [
+      parsed.caseId,
+      ...parsed.evidenceRefs.map((block) => block.blockId),
+    ];
+    const messages = extractTimelineEventsPrompt.buildMessages(
+      JSON.stringify(parsed),
     );
+    const validate = (output: ExtractTimelineEventsOutput) => {
+      const allowed = new Set(
+        parsed.evidenceRefs.map((block) => block.blockId),
+      );
+      for (const event of output.events) {
+        assertRefsAreSubset(event.evidenceBlockIds, allowed);
+      }
+    };
+
+    try {
+      return await this.execute(
+        definition,
+        parsed,
+        inputRefs,
+        messages,
+        extractTimelineEventsOutputSchema,
+        null,
+        validate,
+      );
+    } catch (error: unknown) {
+      if (
+        !(error instanceof AIProviderError) ||
+        ![
+          "GROQ_STRUCTURED_OUTPUT_REJECTED",
+          "OUTPUT_PROVENANCE_INVALID",
+          "PROVIDER_SCHEMA_MISMATCH",
+        ].includes(error.code)
+      ) {
+        throw error;
+      }
+
+      const allowedReferences = parsed.evidenceRefs.map(
+        (block) => block.blockId,
+      );
+      const repairDefinition = {
+        ...definition,
+        modelPurpose: "REASONING" as const,
+        maxCompletionTokens: 4_000,
+      };
+      return this.execute(
+        repairDefinition,
+        parsed,
+        inputRefs,
+        [
+          ...messages,
+          {
+            role: "user",
+            content: [
+              "The previous attempt failed schema or provenance validation.",
+              "Return a fresh result. Copy evidenceBlockIds only from this exact allowlist; omit unsupported events:",
+              JSON.stringify(allowedReferences),
+            ].join("\n"),
+          },
+        ],
+        extractTimelineEventsOutputSchema,
+        null,
+        validate,
+      );
+    }
   }
 
   async extractProcedure(
@@ -323,26 +373,70 @@ export class AIOperationService {
   ): Promise<AIOperationResult<CaseAnalysisOutput>> {
     const parsed = caseAnalysisInputSchema.parse(input);
     const definition = aiOperationRegistry["analyze-case"];
-    return this.execute(
-      definition,
-      parsed,
-      [parsed.caseId, ...parsed.claims.map((claim) => claim.claimId)],
-      analyzeCasePrompt.buildMessages(JSON.stringify(parsed)),
-      caseAnalysisOutputSchema,
-      null,
-      (output) => {
-        const allowedClaims = new Set(
-          parsed.claims.map((claim) => claim.claimId),
+    const inputRefs = [
+      parsed.caseId,
+      ...parsed.claims.map((claim) => claim.claimId),
+    ];
+    const messages = analyzeCasePrompt.buildMessages(JSON.stringify(parsed));
+    const validate = (output: CaseAnalysisOutput) => {
+      const allowedClaims = new Set(
+        parsed.claims.map((claim) => claim.claimId),
+      );
+      if (output.supportedClaimIds.some((id) => !allowedClaims.has(id))) {
+        throw new AIProviderError(
+          "Case analysis referenced an unknown claim.",
+          "OUTPUT_PROVENANCE_INVALID",
+          false,
         );
-        if (output.supportedClaimIds.some((id) => !allowedClaims.has(id))) {
-          throw new AIProviderError(
-            "Case analysis referenced an unknown claim.",
-            "OUTPUT_PROVENANCE_INVALID",
-            false,
-          );
-        }
-      },
-    );
+      }
+    };
+
+    try {
+      return await this.execute(
+        definition,
+        parsed,
+        inputRefs,
+        messages,
+        caseAnalysisOutputSchema,
+        null,
+        validate,
+      );
+    } catch (error: unknown) {
+      if (
+        !(error instanceof AIProviderError) ||
+        ![
+          "GROQ_STRUCTURED_OUTPUT_REJECTED",
+          "OUTPUT_PROVENANCE_INVALID",
+          "PROVIDER_SCHEMA_MISMATCH",
+        ].includes(error.code)
+      ) {
+        throw error;
+      }
+
+      return this.execute(
+        {
+          ...definition,
+          modelPurpose: "FAST" as const,
+          maxCompletionTokens: 1_800,
+        },
+        parsed,
+        inputRefs,
+        [
+          ...messages,
+          {
+            role: "user",
+            content: [
+              "The previous analysis response failed schema or provenance validation.",
+              "Return a fresh response that exactly matches the requested schema.",
+              "Use only supportedClaimIds from the supplied claims and use empty arrays when there is no supported item.",
+            ].join("\n"),
+          },
+        ],
+        caseAnalysisOutputSchema,
+        null,
+        validate,
+      );
+    }
   }
 
   async analyzeResponse(

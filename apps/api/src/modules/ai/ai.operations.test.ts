@@ -198,4 +198,78 @@ describe("bounded AI operation catalog", () => {
     };
     expect(repairRequest.messages.at(-1)?.content).toContain('"p-1"');
   });
+
+  it("performs one constrained repair when timeline provenance is invalid", async () => {
+    const invalidOutput = {
+      events: [
+        {
+          confidence: 0.9,
+          date: "2026-08-18",
+          datePrecision: "EXACT" as const,
+          eventText: "The account was suspended.",
+          evidenceBlockIds: ["invented-block"],
+        },
+      ],
+      needsHumanReview: false,
+    };
+    const repairedOutput = {
+      ...invalidOutput,
+      events: [
+        {
+          ...invalidOutput.events[0]!,
+          evidenceBlockIds: ["block-1"],
+        },
+      ],
+    };
+    const completeStructured = vi
+      .fn()
+      .mockResolvedValueOnce({
+        output: invalidOutput,
+        latencyMs: 10,
+        model: "test-model",
+        providerRequestId: "first",
+        structuredMode: "strict",
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      })
+      .mockResolvedValueOnce({
+        output: repairedOutput,
+        latencyMs: 10,
+        model: "test-model",
+        providerRequestId: "second",
+        structuredMode: "strict",
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      });
+    const runs = {
+      start: vi.fn().mockResolvedValue({ id: "run" }),
+      fail: vi.fn().mockResolvedValue(undefined),
+      succeed: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = new AIOperationService(
+      { completeStructured } as never,
+      {
+        modelFor: vi.fn().mockReturnValue("test-model"),
+        reasoningEffort: vi.fn().mockReturnValue("low"),
+      } as never,
+      runs as never,
+    );
+
+    const result = await service.extractTimelineEvents({
+      caseId: "case-1",
+      evidenceRefs: [
+        {
+          blockId: "block-1",
+          pageNumber: null,
+          text: "The account was suspended.",
+        },
+      ],
+    });
+
+    expect(result.output.events[0]?.evidenceBlockIds).toEqual(["block-1"]);
+    expect(completeStructured).toHaveBeenCalledTimes(2);
+    expect(runs.fail).toHaveBeenCalledTimes(1);
+    const repairRequest = completeStructured.mock.calls[1]?.[0] as {
+      messages: Array<{ content: string }>;
+    };
+    expect(repairRequest.messages.at(-1)?.content).toContain('"block-1"');
+  });
 });

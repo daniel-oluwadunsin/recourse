@@ -1,0 +1,18 @@
+
+Subject: Payouts paused while account information is reviewed
+Business: Brightline Studio Ltd.
+Platform: Stripe
+Notice date: 2026-08-19
+Case reference: STR-2026-0819-318
+
+The business dashboard shows that payouts have been paused because additional account information is required. The notice does not identify whether the missing information relates to the business identity, the bank account receiving payouts, or a recent transaction.
+
+Brightline Studio Ltd. provides web design services. The business states that its recent payments were for completed client projects and that no chargeback or refund is known to be outstanding. The attached dashboard screenshot was captured immediately after the restriction appeared.
+
+Requested review outcome:
+Please identify the specific information required, review the attached account and fulfillment records, and release eligible payouts if the review is resolved.
+
+Important unknowns:
+- The dashboard does not identify the exact document or data field required.
+- The dashboard does not state whether all funds or only a particular payout are affected.
+- No exact submission deadline is included in this notice.

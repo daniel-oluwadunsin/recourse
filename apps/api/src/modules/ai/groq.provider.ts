@@ -27,17 +27,36 @@ export class GroqProvider implements GenerativeAIProvider {
     request: StructuredGenerationRequest<T>,
   ): Promise<StructuredGenerationResult<T>> {
     const schema = toGroqStrictJsonSchema(request.schema);
-    return this.complete(request, {
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: request.schemaName,
-          strict: true,
-          schema,
+    try {
+      return await this.complete(request, {
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: request.schemaName,
+            strict: true,
+            schema,
+          },
         },
-      },
-      messages: request.messages,
-    });
+        messages: request.messages,
+      });
+    } catch (error: unknown) {
+      if (
+        !(error instanceof AIProviderError) ||
+        error.code !== "GROQ_STRUCTURED_OUTPUT_REJECTED"
+      ) {
+        throw error;
+      }
+
+      // Some configured Groq model deployments reject strict JSON Schema even
+      // though they support structured JSON responses. Keep the same Zod
+      // validation and provenance checks at the application boundary while
+      // falling back to JSON mode once, rather than leaving a case stuck.
+      return this.complete(request, {
+        response_format: { type: "json_object" },
+        messages: request.messages,
+        structuredMode: "json_object",
+      });
+    }
   }
 
   async completeMultimodalStructured<T>(

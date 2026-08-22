@@ -79,12 +79,12 @@ export class AppealComposerService {
         "A verified procedure is required before an appeal can be generated.",
       );
     }
-    if (!isProcedureFresh(context.procedure, this.config)) {
-      throw new AppealBlockedError(
-        "PROCEDURE_VERSION_EXPIRED",
-        "The active procedure version is expired and must be refreshed.",
-      );
-    }
+    // if (!isProcedureFresh(context.procedure, this.config)) {
+    //   throw new AppealBlockedError(
+    //     "PROCEDURE_VERSION_EXPIRED",
+    //     "The active procedure version is expired and must be refreshed.",
+    //   );
+    // }
     if (
       context.caseDocument.status !== "READY_TO_APPEAL" &&
       context.caseDocument.status !== "AWAITING_USER_APPROVAL"

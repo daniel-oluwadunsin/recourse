@@ -29,6 +29,7 @@ export class UsageBudgetExceededError extends HttpException {
 @Injectable()
 export class UsageBudgetService implements OnApplicationShutdown {
   private redis: Redis | null = null;
+  private redisReady: Promise<void> | null = null;
   private readonly memory = new Map<
     string,
     { count: number; expiresAt: number }
@@ -73,7 +74,7 @@ export class UsageBudgetService implements OnApplicationShutdown {
     }
 
     try {
-      const client = this.redisClient();
+      const client = await this.redisClient();
       const count = await client.incr(storageKey);
       if (count === 1) await client.expire(storageKey, ttlSeconds);
       if (count > limit) {
@@ -128,20 +129,37 @@ export class UsageBudgetService implements OnApplicationShutdown {
       await this.redis.quit().catch(() => this.redis?.disconnect());
     }
     this.redis = null;
+    this.redisReady = null;
   }
 
-  private redisClient(): Redis {
+  private async redisClient(): Promise<Redis> {
     if (!this.redis) {
-      this.redis = new Redis(this.config.getOrThrow("REDIS_URL"), {
+      const client = new Redis(this.config.getOrThrow("REDIS_URL"), {
         commandTimeout: this.config.get("REDIS_COMMAND_TIMEOUT_MS") ?? 5000,
         connectTimeout: this.config.get("REDIS_CONNECT_TIMEOUT_MS") ?? 10000,
         enableOfflineQueue: false,
+        lazyConnect: true,
         maxRetriesPerRequest: 1,
         retryStrategy: (attempt: number) =>
           Math.min(1000 * 2 ** Math.min(attempt, 5), 10000),
       });
-      this.redis.on("error", () => undefined);
+      client.on("error", () => undefined);
+      this.redis = client;
+      this.redisReady = client.connect().catch((error: unknown) => {
+        if (this.redis === client) {
+          client.disconnect();
+          this.redis = null;
+          this.redisReady = null;
+        }
+        throw error;
+      });
     }
+
+    // With the offline queue deliberately disabled, issuing INCR before the
+    // initial ready handshake fails even when Redis is healthy. Await the one
+    // shared connection attempt so the fail-closed budget is reliable during
+    // worker startup and concurrent first requests.
+    await this.redisReady;
     return this.redis;
   }
 }

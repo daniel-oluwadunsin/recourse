@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   apiFetch,
   API_URL,
@@ -56,6 +56,18 @@ export function useCase(caseId: string) {
     queryKey: ["case", caseId],
     queryFn: () => apiFetch<CaseRecord>(`/cases/${caseId}`),
     enabled: Boolean(caseId),
+    refetchInterval: (query) => {
+      const status = (query.state.data as CaseRecord | undefined)?.status;
+      return status &&
+        [
+          "CLASSIFYING",
+          "PROCEDURE_RESOLUTION",
+          "CASE_ANALYSIS",
+          "REPLANNING",
+        ].includes(status)
+        ? 5000
+        : false;
+    },
   });
 }
 export function useEvents(caseId: string) {
@@ -76,7 +88,9 @@ export function useEvidence(caseId: string) {
     refetchInterval: (query) => {
       const data = query.state.data as Paginated<Evidence> | undefined;
       return data?.items.some((item) =>
-        ["UPLOADING", "UPLOADED", "PROCESSING"].includes(item.processingStatus),
+        ["UPLOADING", "UPLOADED", "QUEUED", "PROCESSING"].includes(
+          item.processingStatus,
+        ),
       )
         ? 5000
         : false;
@@ -451,16 +465,26 @@ export async function createTextEvidence(
   });
 }
 
-export function useCaseActivityStream(caseId: string) {
+export type CaseActivityStreamStatus =
+  "CONNECTING" | "CONNECTED" | "RECONNECTING" | "OFFLINE";
+
+export function useCaseActivityStream(
+  caseId: string,
+): CaseActivityStreamStatus {
   const client = useQueryClient();
   const token = useAuthStore((state) => state.accessToken);
+  const [status, setStatus] = useState<CaseActivityStreamStatus>("CONNECTING");
   useEffect(() => {
-    if (!caseId || !token) return;
+    if (!caseId || !token) {
+      return;
+    }
     let stopped = false;
     let lastEventId = "";
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
     const connect = async () => {
+      if (stopped) return;
+      setStatus(lastEventId ? "RECONNECTING" : "CONNECTING");
       controller = new AbortController();
       try {
         const response = await fetch(
@@ -488,6 +512,7 @@ export function useCaseActivityStream(caseId: string) {
         }
         if (!response.ok || !response.body)
           throw new Error("Activity stream unavailable");
+        setStatus("CONNECTED");
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -527,7 +552,10 @@ export function useCaseActivityStream(caseId: string) {
       } catch {
         /* reconnect uses persisted MongoDB events as the recovery source */
       }
-      if (!stopped) reconnectTimer = setTimeout(() => void connect(), 5000);
+      if (!stopped) {
+        setStatus("RECONNECTING");
+        reconnectTimer = setTimeout(() => void connect(), 5000);
+      }
     };
     void connect();
     return () => {
@@ -536,4 +564,5 @@ export function useCaseActivityStream(caseId: string) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   }, [caseId, client, token]);
+  return status;
 }

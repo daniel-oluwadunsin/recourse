@@ -99,7 +99,7 @@ export const aiOperationRegistry = {
     schemaName: "verify_procedural_claim_v1",
     inputSchema: verifyProceduralClaimInputSchema,
     outputSchema: verifyProceduralClaimOutputSchema,
-    maxCompletionTokens: 2500,
+    maxCompletionTokens: 1800,
     buildPromptInput: (input) => JSON.stringify(input),
   },
   "detect-claim-conflicts": {
@@ -121,7 +121,7 @@ export const aiOperationRegistry = {
     schemaName: "analyze_case_v1",
     inputSchema: caseAnalysisInputSchema,
     outputSchema: caseAnalysisOutputSchema,
-    maxCompletionTokens: 3500,
+    maxCompletionTokens: 2500,
     buildPromptInput: (input) => JSON.stringify(input),
   },
   "analyze-response": {

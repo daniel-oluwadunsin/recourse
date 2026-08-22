@@ -318,10 +318,8 @@ export class ProcedureService {
       };
     }
 
-    const version = await this.procedureVersionModel.create({
+    const version = await this.createOrReuseProcedureVersion({
       procedureId: procedure._id,
-      version: (previousVersion?.version ?? 0) + 1,
-      previousVersionId: previousVersion?._id ?? null,
       contentSha256,
       scope: plan.scope,
       internalReview: { needsHumanReview: extracted.needsHumanReview },
@@ -334,15 +332,10 @@ export class ProcedureService {
         text: value,
       })),
       submissionCapability: extracted.submissionCapability,
-      proceduralClaimIds: [],
       sourceSnapshotIds: sources.map(({ snapshot }) => snapshot._id),
-      confidence: 0,
-      confidenceFactors: {},
-      conflicts: [],
       semanticChangeSummary: previousVersion
         ? "Material source or extracted procedure change detected."
         : null,
-      observedAt: new Date(),
     });
     await this.persistSourceChunks(procedure, version, sources);
     const claims = await this.persistClaims(
@@ -648,9 +641,8 @@ export class ProcedureService {
       if (credits >= maxCredits) break;
     }
     let ranked = candidates
-      .map((result) => ({
-        result,
-        rank: this.authority.rank({
+      .map((result) => {
+        const authorityRank = this.authority.rank({
           url: result.url,
           institution,
           jurisdictionKey: plan.scope.jurisdictionKey,
@@ -658,8 +650,22 @@ export class ProcedureService {
           decisionType: plan.scope.decisionType ?? "UNKNOWN",
           publishedDate: result.publishedDate,
           text: `${result.title} ${result.content}`,
-        }),
-      }))
+        });
+        return {
+          result,
+          rank: authorityRank
+            ? {
+                ...authorityRank,
+                // Preserve Tavily's query relevance inside an authority tier;
+                // otherwise unrelated first-party pages tie with the actual
+                // review procedure and can dominate extraction by result order.
+                score:
+                  authorityRank.score +
+                  Math.max(0, Math.min(result.score, 1)) * 20,
+              }
+            : null,
+        };
+      })
       .filter(
         (
           value,
@@ -1047,27 +1053,46 @@ export class ProcedureService {
             "Verification provider unavailable; the claim remains unverified.";
         }
       }
-      const created = await this.claimModel.create({
-        procedureVersionId: versionId,
-        claimKey: extractedClaim.claimKey,
-        type: extractedClaim.type,
-        humanText: extractedClaim.humanText,
-        normalizedValue: extractedClaim.normalizedValue
-          ? { value: extractedClaim.normalizedValue }
-          : {},
-        verificationStatus: status,
-        verificationExplanation: explanation,
-        confidence: extractedClaim.confidence,
-        authorityTier,
-        support: [
+      const created = await this.claimModel
+        .findOneAndUpdate(
           {
-            sourceSnapshotId: supportSnapshot._id,
-            paragraphIds: supportParagraphIds,
-            verifierRunId,
+            procedureVersionId: versionId,
+            claimKey: extractedClaim.claimKey,
           },
-        ],
-        conflictsWith: [],
-      });
+          {
+            $set: {
+              type: extractedClaim.type,
+              humanText: extractedClaim.humanText,
+              normalizedValue: extractedClaim.normalizedValue
+                ? { value: extractedClaim.normalizedValue }
+                : {},
+              verificationStatus: status,
+              verificationExplanation: explanation,
+              confidence: extractedClaim.confidence,
+              authorityTier,
+              support: [
+                {
+                  sourceSnapshotId: supportSnapshot._id,
+                  paragraphIds: supportParagraphIds,
+                  verifierRunId,
+                },
+              ],
+              conflictsWith: [],
+            },
+            $setOnInsert: {
+              procedureVersionId: versionId,
+              claimKey: extractedClaim.claimKey,
+            },
+          },
+          { new: true, upsert: true },
+        )
+        .exec();
+      if (!created) {
+        throw new ProcedureResolutionError(
+          "PROCEDURE_CLAIM_PERSISTENCE_INCOMPLETE",
+          "A procedural claim was not fully persisted.",
+        );
+      }
       claims.push(created);
     }
     return claims;
@@ -1080,7 +1105,10 @@ export class ProcedureService {
     const procedure = await this.procedureModel
       .findOne({
         scopeKey: plan.scopeKey,
-        status: { $in: ["ACTIVE", "CONFLICTED"] },
+        // Only a verified, conflict-free procedure is safe to reuse. A
+        // conflicted result must be retrieved and verified again when the user
+        // retries after correcting the case or when retrieval logic improves.
+        status: "ACTIVE",
       })
       .exec();
     if (!procedure?.currentVersionId || !procedure.lastVerifiedAt) return null;
@@ -1100,6 +1128,72 @@ export class ProcedureService {
       .findById(procedure.currentVersionId)
       .exec();
     return version ? { procedure, version } : null;
+  }
+
+  private async createOrReuseProcedureVersion(input: {
+    procedureId: Types.ObjectId;
+    contentSha256: string;
+    scope: Record<string, unknown>;
+    internalReview: Record<string, unknown>;
+    deadlines: Record<string, unknown>[];
+    evidenceRequirements: Record<string, unknown>[];
+    steps: Record<string, unknown>[];
+    escalationRoutes: Record<string, unknown>[];
+    submissionCapability: ExtractProcedureOutput["submissionCapability"];
+    sourceSnapshotIds: Types.ObjectId[];
+    semanticChangeSummary: string | null;
+  }): Promise<
+    import("./schemas/procedure-version.schema").ProcedureVersionDocument
+  > {
+    let lastDuplicateError: unknown;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const existing = await this.procedureVersionModel
+        .findOne({
+          procedureId: input.procedureId,
+          contentSha256: input.contentSha256,
+        })
+        .exec();
+      if (existing) return existing;
+
+      const latest = await this.procedureVersionModel
+        .findOne({ procedureId: input.procedureId })
+        .sort({ version: -1, _id: -1 })
+        .exec();
+
+      try {
+        return await this.procedureVersionModel.create({
+          procedureId: input.procedureId,
+          version: (latest?.version ?? 0) + 1,
+          previousVersionId: latest?._id ?? null,
+          contentSha256: input.contentSha256,
+          scope: input.scope,
+          internalReview: input.internalReview,
+          deadlines: input.deadlines,
+          evidenceRequirements: input.evidenceRequirements,
+          steps: input.steps,
+          escalationRoutes: input.escalationRoutes,
+          submissionCapability: input.submissionCapability,
+          proceduralClaimIds: [],
+          sourceSnapshotIds: input.sourceSnapshotIds,
+          confidence: 0,
+          confidenceFactors: {},
+          conflicts: [],
+          semanticChangeSummary: input.semanticChangeSummary,
+          observedAt: new Date(),
+        });
+      } catch (error: unknown) {
+        if (!isMongoDuplicateKeyError(error)) throw error;
+        lastDuplicateError = error;
+      }
+    }
+
+    throw lastDuplicateError instanceof Error
+      ? lastDuplicateError
+      : new ProcedureResolutionError(
+          "PROCEDURE_VERSION_PERSISTENCE_CONFLICT",
+          "Procedure version persistence conflicted with another resolution attempt.",
+        );
   }
 
   private async upsertProcedure(
@@ -1474,6 +1568,15 @@ export function findConflicts(
 
 function isAIProviderError(error: unknown): error is AIProviderError {
   return error instanceof AIProviderError;
+}
+
+function isMongoDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 11000
+  );
 }
 
 function publicSource(source: {

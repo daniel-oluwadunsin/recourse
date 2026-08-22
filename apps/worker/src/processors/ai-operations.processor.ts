@@ -45,11 +45,17 @@ export class AIOperationsProcessor
       return await this.jobs.process(parsed.data);
     } catch (error: unknown) {
       if (error instanceof AIJobDomainError) {
+        if (parsed.data.operation === "analyze-case") {
+          await this.jobs.markCaseAnalysisFailure(parsed.data, error.code);
+        }
         throw new NonRetryableQueueError(error.message, error.code);
       }
       if (error instanceof AIProviderError) {
         if (error.retryable) {
           throw new TransientQueueError(error.message, error.code);
+        }
+        if (parsed.data.operation === "analyze-case") {
+          await this.jobs.markCaseAnalysisFailure(parsed.data, error.code);
         }
         throw new NonRetryableQueueError(error.message, error.code);
       }

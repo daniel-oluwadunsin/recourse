@@ -114,8 +114,11 @@ const baseEnvironmentSchema = z.object({
 
   MONGODB_URI: optionalString,
   MONGODB_DATABASE: z.string().min(1).default("recourse"),
-  MONGODB_MAX_POOL_SIZE: optionalNumber(1),
-  MONGODB_MIN_POOL_SIZE: optionalNumber(0),
+  // The MongoDB Node driver defaults to a pool of 100 per process. Recourse
+  // runs both API and worker processes, so leaving these unset can exhaust a
+  // local MongoDB server before normal request traffic begins.
+  MONGODB_MAX_POOL_SIZE: optionalNumber(1).default(20),
+  MONGODB_MIN_POOL_SIZE: optionalNumber(0).default(1),
   MONGODB_AUTO_INDEX: optionalBoolean.default(false),
   MONGODB_SERVER_SELECTION_TIMEOUT_MS: z.coerce
     .number()

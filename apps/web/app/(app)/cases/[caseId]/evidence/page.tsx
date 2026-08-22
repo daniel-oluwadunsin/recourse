@@ -9,8 +9,10 @@ import {
   useEvidence,
   useEvidenceBlocks,
   useClaims,
+  useCase,
   useVerifyEvidenceClaims,
 } from "../../../../../lib/queries";
+import { evidenceUploadPolicy } from "../../../../../lib/evidence-policy";
 import type { Evidence } from "../../../../../lib/types";
 import {
   DocumentText,
@@ -106,7 +108,11 @@ function EvidenceDetail({
   const remove = useDeleteEvidence(caseId);
   const verifyClaims = useVerifyEvidenceClaims(caseId);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const canOpen =
+    evidence.processingStatus === "READY" &&
+    ["CLEAN", "SKIPPED"].includes(evidence.malwareScanStatus);
   const download = async () => {
+    if (!canOpen) return;
     setDownloadError(null);
     try {
       const result = await apiFetch<{
@@ -156,9 +162,9 @@ function EvidenceDetail({
         <Button
           variant="secondary"
           onClick={download}
-          disabled={evidence.processingStatus === "DELETED"}
+          disabled={!canOpen || evidence.processingStatus === "DELETED"}
         >
-          <Eye size={17} /> Open private copy
+          <Eye size={17} /> {canOpen ? "Open private copy" : "Processing…"}
         </Button>
         {evidence.processingStatus === "READY" ? (
           <Button
@@ -177,6 +183,15 @@ function EvidenceDetail({
           <Trash size={17} /> Delete
         </Button>
       </div>
+      {!canOpen && evidence.processingStatus !== "DELETED" ? (
+        <div className="mt-4">
+          <Notice tone="info">
+            Upload complete. Security scanning and document processing are
+            running in the background. You can open the private copy when the
+            status changes to Ready.
+          </Notice>
+        </div>
+      ) : null}
       {downloadError ? (
         <div className="mt-4">
           <Notice tone="danger">{downloadError}</Notice>
@@ -256,8 +271,9 @@ function EvidenceDetail({
 
 export default function EvidencePage() {
   const { caseId } = useParams<{ caseId: string }>();
+  const caseQuery = useCase(caseId);
   const query = useEvidence(caseId);
-  const [selected, setSelected] = useState<Evidence | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   if (query.isLoading) return <LoadingState label="Loading evidence" />;
   if (query.isError)
@@ -271,7 +287,16 @@ export default function EvidencePage() {
         retry={() => void query.refetch()}
       />
     );
+  const uploadPolicy = caseQuery.data
+    ? evidenceUploadPolicy(caseQuery.data.status)
+    : { mode: "BLOCKED" as const, message: "Loading case permissions…" };
+  const canAddEvidence = uploadPolicy.mode !== "BLOCKED";
+  const fixedKind =
+    uploadPolicy.mode === "INSTITUTION_RESPONSE_ONLY"
+      ? ("INSTITUTION_RESPONSE" as const)
+      : undefined;
   const items = query.data?.items ?? [];
+  const selected = items.find((item) => item.id === selectedId) ?? null;
   return (
     <div>
       <PageHeader
@@ -279,17 +304,25 @@ export default function EvidencePage() {
         title="Evidence ledger"
         description="Private files, processing status, hashes, and extracted text with block/page provenance."
         action={
-          <Button type="button" onClick={() => setShowUploader(true)}>
+          <Button
+            type="button"
+            disabled={!canAddEvidence}
+            onClick={() => setShowUploader(true)}
+          >
             <Upload size={17} /> Add evidence
           </Button>
         }
       />
+      <Notice tone={canAddEvidence ? "info" : "warning"}>
+        {uploadPolicy.message}
+      </Notice>
       {showUploader ? (
         <EvidenceUploader
           caseId={caseId}
+          fixedKind={fixedKind}
           onCancel={() => setShowUploader(false)}
           onComplete={(evidence) => {
-            setSelected(evidence);
+            setSelectedId(evidence.id);
             setShowUploader(false);
             void query.refetch();
           }}
@@ -300,7 +333,11 @@ export default function EvidencePage() {
           title="No evidence attached"
           description="Upload a decision notice, supporting document, email, text, or screenshot directly to this case."
           action={
-            <Button type="button" onClick={() => setShowUploader(true)}>
+            <Button
+              type="button"
+              disabled={!canAddEvidence}
+              onClick={() => setShowUploader(true)}
+            >
               Upload evidence
             </Button>
           }
@@ -312,7 +349,7 @@ export default function EvidencePage() {
               {items.map((evidence) => (
                 <button
                   key={evidence.id}
-                  onClick={() => setSelected(evidence)}
+                  onClick={() => setSelectedId(evidence.id)}
                   className={`w-full rounded-xl border p-4 text-left transition ${selected?.id === evidence.id ? "border-blue bg-muted" : "border-line hover:bg-muted"}`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -335,7 +372,7 @@ export default function EvidencePage() {
                 caseId={caseId}
                 evidence={selected}
                 onDeleted={() => {
-                  setSelected(null);
+                  setSelectedId(null);
                   void query.refetch();
                 }}
               />

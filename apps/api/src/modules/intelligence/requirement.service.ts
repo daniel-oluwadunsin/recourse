@@ -6,6 +6,7 @@ import { type EvidenceRequirementMatchStatus } from "@recourse/contracts";
 
 import { OwnershipAuthorizationService } from "../../common/authorization/ownership.service";
 import { Case } from "../cases/schemas/case.schema";
+import { Procedure } from "../procedure/schemas/procedure.schema";
 import { ProcedureVersion } from "../procedure/schemas/procedure-version.schema";
 import { Claim, type ClaimDocument } from "./schemas/claim.schema";
 import {
@@ -19,6 +20,8 @@ export class RequirementService {
     @InjectModel(Case.name) private readonly caseModel: Model<Case>,
     @InjectModel(ProcedureVersion.name)
     private readonly procedureVersionModel: Model<ProcedureVersion>,
+    @InjectModel(Procedure.name)
+    private readonly procedureModel: Model<Procedure>,
     @InjectModel(Claim.name) private readonly claimModel: Model<Claim>,
     @InjectModel(EvidenceRequirementMatch.name)
     private readonly matchModel: Model<EvidenceRequirementMatch>,
@@ -32,6 +35,28 @@ export class RequirementService {
       .findById(caseDocument.activeProcedureVersionId)
       .exec();
     if (!version) return [];
+    const procedure = caseDocument.activeProcedureId
+      ? await this.procedureModel.findById(caseDocument.activeProcedureId).exec()
+      : null;
+    if (
+      !procedure ||
+      procedure.status !== "ACTIVE" ||
+      !version.procedureId.equals(procedure._id)
+    ) {
+      // Requirement matches are derived projections. An unresolved or
+      // conflicted procedure remains inspectable, but must never create
+      // evidence demands or user questions as though its claims were verified.
+      await Promise.all([
+        this.matchModel.deleteMany({ caseId: caseDocument._id }).exec(),
+        this.caseModel
+          .updateOne(
+            { _id: caseDocument._id, deletedAt: null },
+            { $set: { openCriticalGapCount: 0 } },
+          )
+          .exec(),
+      ]);
+      return [];
+    }
     const claims = await this.claimModel
       .find({ caseId: caseDocument._id, resolutionStatus: { $ne: "MERGED" } })
       .exec();

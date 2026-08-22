@@ -24,6 +24,14 @@ const trustedCatalog = [
     domains: ["amazon.com", "sellercentral.amazon.com"],
     verifiedOfficialDomains: ["amazon.com", "sellercentral.amazon.com"],
   },
+  {
+    aliases: ["Stripe Payments"],
+    canonicalName: "Stripe",
+    categories: ["payment processor", "financial platform"],
+    domains: ["stripe.com"],
+    // Stripe's support and documentation sites are first-party subdomains.
+    verifiedOfficialDomains: ["stripe.com"],
+  },
 ] as const;
 
 async function upsertTrustedInstitutions(): Promise<void> {

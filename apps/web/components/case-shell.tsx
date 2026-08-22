@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCase, useCaseActivityStream } from "../lib/queries";
+import { useCase, useCaseActivityStream, useEvents } from "../lib/queries";
+import { caseEventTitle } from "../lib/case-events";
 import {
   ArrowLeft,
   Activity,
@@ -15,7 +16,7 @@ import {
   SecuritySafe,
   ShieldTick,
 } from "./icons";
-import { ErrorState, LoadingState, StatusBadge } from "./ui";
+import { ErrorState, LinkButton, LoadingState, StatusBadge } from "./ui";
 import { CaseHealth } from "./case-health";
 
 const tabs = [
@@ -40,7 +41,8 @@ export function CaseShell({
 }) {
   const pathname = usePathname();
   const query = useCase(caseId);
-  useCaseActivityStream(caseId);
+  const events = useEvents(caseId);
+  const streamStatus = useCaseActivityStream(caseId);
   if (query.isLoading) return <LoadingState label="Loading case workspace" />;
   if (query.isError || !query.data)
     return (
@@ -54,6 +56,26 @@ export function CaseShell({
       />
     );
   const item = query.data;
+  const processingCopy: Record<string, string> = {
+    CASE_ANALYSIS:
+      "Recourse is comparing your evidence, requirements, contradictions, and timeline.",
+    CLASSIFYING:
+      "Recourse is reading the decision and identifying what happened.",
+    PROCEDURE_RESOLUTION:
+      "Recourse is finding and verifying the current procedure from authoritative sources.",
+    REPLANNING:
+      "Recourse is reviewing the latest response and deciding what comes next.",
+  };
+  const latestEvent = events.data?.items.at(-1);
+  const isProcessing = item.status in processingCopy;
+  const streamLabel =
+    streamStatus === "CONNECTED"
+      ? "Live updates connected"
+      : streamStatus === "RECONNECTING"
+        ? "Reconnecting to live updates"
+        : streamStatus === "OFFLINE"
+          ? "Live updates unavailable"
+          : "Connecting to live updates";
   return (
     <div>
       <Link href="/cases" className="back-link">
@@ -77,6 +99,37 @@ export function CaseShell({
         </div>
         <CaseHealth caseId={caseId} />
       </div>
+      {isProcessing ? (
+        <div
+          className="mt-5 flex flex-col gap-4 rounded-2xl border border-blue/30 bg-blue/5 p-4 md:flex-row md:items-center md:justify-between"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-3">
+            <span className="spinner spinner-dark mt-1" aria-hidden="true" />
+            <div>
+              <p className="font-semibold">Recourse is processing this case</p>
+              <p className="mt-1 text-sm leading-6 text-pencil-muted">
+                {processingCopy[item.status]}
+              </p>
+              {latestEvent ? (
+                <p className="mt-2 text-xs text-pencil-muted">
+                  Latest: {caseEventTitle(latestEvent.type)} ·{" "}
+                  {new Date(latestEvent.createdAt).toLocaleString()}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold text-pencil-muted">
+              {streamLabel}
+            </span>
+            <LinkButton href={`/cases/${caseId}/activity`}>
+              View live activity
+            </LinkButton>
+          </div>
+        </div>
+      ) : null}
       <div className="workspace-grid">
         <nav className="workspace-nav" aria-label="Case workspace navigation">
           {tabs.map(([suffix, label, Icon]) => {

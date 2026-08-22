@@ -174,6 +174,7 @@ export interface Evidence {
   byteSize: number;
   sha256: string | null;
   processingStatus: EvidenceProcessingStatus;
+  malwareScanStatus: "PENDING" | "CLEAN" | "INFECTED" | "FAILED" | "SKIPPED";
   extractionMethod: string | null;
   pageCount: number | null;
   processingErrorCode: string | null;

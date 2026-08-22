@@ -517,6 +517,7 @@ select:focus-visible {
   transform: rotate(6deg);
 }
 .graph-canvas {
+  height: clamp(420px, 68vh, 720px);
   min-height: 520px;
   border: 2px solid var(--foreground);
   border-radius: 24px 8px 20px 10px / 9px 22px 8px 25px;

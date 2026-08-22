@@ -43,6 +43,7 @@ import {
   type StoredObjectMetadata,
   type StorageProvider,
 } from "../storage/storage.types";
+import { assertEvidenceUploadAllowed } from "./evidence-upload-policy";
 
 const MAX_EVIDENCE_PAGE_SIZE = 50;
 const HASH_SAMPLE_BYTES = 8192;
@@ -84,6 +85,7 @@ export class EvidenceService {
     maxBytes: number;
   }> {
     const activeCase = await this.findOwnedCase(ownerId, caseId);
+    assertEvidenceUploadAllowed(activeCase.status, input.kind);
     const normalized = this.normalizeInput(input);
     const storageKey = createOpaqueStorageKey(
       this.config.get("CLOUDINARY_UPLOAD_FOLDER") ?? "recourse",
@@ -153,6 +155,8 @@ export class EvidenceService {
     if (evidence.processingStatus === "UPLOADED") {
       return this.toPublic(evidence);
     }
+    const activeCase = await this.findOwnedCase(ownerId, caseId);
+    assertEvidenceUploadAllowed(activeCase.status, evidence.kind);
     if (evidence.processingStatus !== "UPLOADING") {
       throw new ConflictException(
         "Evidence is not awaiting upload completion.",
@@ -219,6 +223,15 @@ export class EvidenceService {
       }
 
       const updated = await this.connection.transaction(async (session) => {
+        const currentCase = await this.caseModel
+          .findOne({ _id: evidence.caseId, deletedAt: null })
+          .session(session)
+          .exec();
+        if (!currentCase) {
+          throw new NotFoundException("Case not found.");
+        }
+        assertEvidenceUploadAllowed(currentCase.status, evidence.kind);
+
         const result = await this.evidenceModel.findOneAndUpdate(
           {
             _id: evidence._id,
@@ -302,6 +315,7 @@ export class EvidenceService {
   ): Promise<PublicEvidence> {
     const activeCase = await this.findOwnedCase(ownerId, caseId);
     const text = input.text.trim();
+    assertEvidenceUploadAllowed(activeCase.status, input.kind ?? "TEXT");
     if (!text) {
       throw toEvidenceHttpError(
         new EvidenceInputError("Evidence text is required.", "INVALID_TEXT"),
@@ -367,6 +381,15 @@ export class EvidenceService {
 
     try {
       const created = await this.connection.transaction(async (session) => {
+        const currentCase = await this.caseModel
+          .findOne({ _id: activeCase._id, deletedAt: null })
+          .session(session)
+          .exec();
+        if (!currentCase) {
+          throw new NotFoundException("Case not found.");
+        }
+        assertEvidenceUploadAllowed(currentCase.status, input.kind ?? "TEXT");
+
         const [evidence] = await this.evidenceModel.create(
           [
             {

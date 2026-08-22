@@ -18,7 +18,7 @@ export class AppealsController {
   ) {}
 
   @Post("appeals/generate")
-  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  // @Throttle({ default: { limit: 10, ttl: 3600000 } })
   generate(
     @CurrentUser() user: AuthenticatedUser,
     @Param("caseId") caseId: string,

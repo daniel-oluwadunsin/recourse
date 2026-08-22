@@ -144,6 +144,28 @@ export class CaseOrchestratorService {
         scheduled.push(`procedure-retrieval:${activeCase._id.toString()}`);
       }
     }
+    if (event.type === "DECISION_CORRECTED") {
+      const activeCase = await this.caseModel
+        .findOne({ _id: event.caseId, deletedAt: null })
+        .exec();
+      if (activeCase?.status === "NEEDS_HUMAN") {
+        await this.stateMachine.transition(
+          activeCase._id.toString(),
+          "PROCEDURE_RESOLUTION",
+          {
+            actorId: null,
+            actorType: "SYSTEM",
+            correlationId: event.correlationId ?? undefined,
+          },
+          {
+            expectedCurrent: ["NEEDS_HUMAN"],
+            expectedRevision: activeCase.revision,
+            idempotencyKey: `procedure-reresolve-after-decision-correction-${activeCase._id.toString()}-${activeCase.revision}`,
+            payload: { triggerEventId: event._id.toString() },
+          },
+        );
+      }
+    }
     if (event.type === "EVIDENCE_UPLOADED") {
       const evidenceId = readPayloadString(event, "evidenceId");
       if (evidenceId) {
@@ -210,9 +232,15 @@ export class CaseOrchestratorService {
     }
 
     // Evidence can finish before procedure retrieval. Re-check durable ready
-    // evidence when the case enters collection so that event ordering cannot
-    // strand an otherwise analyzable case.
-    if (event.type === "PROCEDURE_RESOLVED") {
+    // evidence after either terminal procedure outcome so event ordering (or
+    // an honestly unresolved procedure) cannot strand case analysis. Analysis
+    // may still return NEEDS_HUMAN; unresolved procedure claims continue to
+    // prevent READY_TO_APPEAL in the readiness service.
+    if (
+      event.type === "PROCEDURE_RESOLVED" ||
+      (event.type === "CASE_NEEDS_HUMAN" &&
+        Boolean(readPayloadString(event, "procedureId")))
+    ) {
       await this.scheduleCaseAnalysisIfReady(event, scheduled);
     }
 
@@ -376,7 +404,17 @@ export class CaseOrchestratorService {
         processingStatus: "READY",
       }),
     ]);
-    if (activeCase?.status !== "EVIDENCE_COLLECTION" || !readyEvidence) return;
+    if (
+      !activeCase ||
+      !readyEvidence ||
+      ![
+        "EVIDENCE_COLLECTION",
+        "NEEDS_HUMAN",
+        "READY_TO_APPEAL",
+      ].includes(activeCase.status)
+    ) {
+      return;
+    }
 
     const transition = await this.stateMachine.transition(
       activeCase._id.toString(),
@@ -388,10 +426,18 @@ export class CaseOrchestratorService {
       },
       {
         eventType: "CASE_STATUS_CHANGED",
-        expectedCurrent: ["EVIDENCE_COLLECTION"],
+        expectedCurrent: [
+          "EVIDENCE_COLLECTION",
+          "NEEDS_HUMAN",
+          "READY_TO_APPEAL",
+        ],
         expectedRevision: activeCase.revision,
         idempotencyKey: `case-analysis-start-${activeCase._id.toString()}-${activeCase.revision}`,
         payload: {
+          reason:
+            activeCase.status === "EVIDENCE_COLLECTION"
+              ? "INITIAL_EVIDENCE_READY"
+              : "NEW_EVIDENCE_REQUIRES_REVIEW",
           triggerEventId: event._id.toString(),
           to: "CASE_ANALYSIS",
         },

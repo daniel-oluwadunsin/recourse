@@ -42,10 +42,11 @@ export class ProcedureQueryBuilderService {
     const jurisdiction = input.jurisdictionKey
       ? ` ${input.jurisdictionKey}`
       : "";
+    const decision = decisionQueryTerms(input.decisionType);
     const queries = unique([
-      `${institution} ${input.decisionType.toLowerCase()} ${input.relationship.toLowerCase()} appeal review procedure${jurisdiction}`,
-      `${institution} appeal review policy ${input.decisionType.toLowerCase()}${jurisdiction}`,
-      `${institution} official help appeal ${input.decisionType.toLowerCase()}`,
+      `${institution} ${decision} ${input.relationship.toLowerCase()} appeal review procedure${jurisdiction}`,
+      `${institution} appeal review policy ${decision}${jurisdiction}`,
+      `${institution} official help appeal ${decision}`,
     ]).map((query) => query.slice(0, 399));
     const queryHash = createHash("sha256")
       .update(
@@ -72,4 +73,11 @@ function unique(values: string[]): string[] {
       values.map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean),
     ),
   ];
+}
+
+function decisionQueryTerms(value: DecisionType): string {
+  if (value === "PAYMENT_HOLD") {
+    return "payout hold payment restriction account review";
+  }
+  return value.toLowerCase().replace(/_/g, " ");
 }

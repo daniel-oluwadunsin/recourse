@@ -185,6 +185,8 @@ function safePayload(
     "revision",
     "titleChanged",
     "tombstoneVersion",
+    "failureCode",
+    "reason",
   ]);
   const result: Record<string, unknown> = {};
   for (const key of allowed) {

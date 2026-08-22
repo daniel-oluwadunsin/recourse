@@ -1,6 +1,10 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import {
+  caseEventDescription,
+  caseEventTitle,
+} from "../../../../../lib/case-events";
 import { useEvents } from "../../../../../lib/queries";
 import { Activity, Refresh2 } from "../../../../../components/icons";
 import {
@@ -56,7 +60,7 @@ export default function ActivityPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-semibold">
-                        {event.type.replaceAll("_", " ")}
+                        {caseEventTitle(event.type)}
                       </p>
                       <span className="text-xs text-pencil-muted">
                         #{event.sequence} ·{" "}
@@ -68,6 +72,9 @@ export default function ActivityPage() {
                       {event.correlationId
                         ? ` · correlation ${event.correlationId}`
                         : ""}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-pencil-muted">
+                      {caseEventDescription(event)}
                     </p>
                     <details className="mt-3">
                       <summary className="cursor-pointer text-xs font-semibold text-blue">

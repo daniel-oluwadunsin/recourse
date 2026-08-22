@@ -53,7 +53,7 @@ export default function DashboardPage() {
                 ["NEEDS_HUMAN", "REPLANNING"].includes(item.status),
               ).length
             }
-            helper="Backend status only"
+            helper="Cases that require your input"
           />
         </Card>
         <Card>

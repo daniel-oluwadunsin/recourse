@@ -31,8 +31,8 @@ export function CaseHealth({ caseId }: { caseId: string }) {
   return (
     <Card className="health-panel">
       <div className="flex items-center justify-between">
-        <p className="font-semibold">Case health</p>
-        <span className="text-xs text-pencil-muted">Backend-derived</span>
+        <p className="font-semibold">Case progress</p>
+        <span className="text-xs text-pencil-muted">Live</span>
       </div>
       <div className="health-score">
         <span className="health-score-number">
@@ -40,27 +40,43 @@ export function CaseHealth({ caseId }: { caseId: string }) {
             ? `${Math.round(readiness.score)}%`
             : "—"}
         </span>
-        <span className="text-xs text-pencil-muted">Readiness</span>
+        <span className="text-xs text-pencil-muted">Ready to appeal</span>
       </div>
       <div className="space-y-3 text-sm">
         <div className="health-row">
           <span>
             <Warning2 size={17} /> Critical gaps
           </span>
-          <strong>{healthCalculated ? (criticalGaps ?? 0) : "—"}</strong>
+          <strong>
+            {healthCalculated
+              ? criticalGaps
+                ? `${criticalGaps} to review`
+                : "None"
+              : "Not reviewed"}
+          </strong>
         </div>
         <div className="health-row">
           <span>
             <Warning2 size={17} /> Open contradictions
           </span>
-          <strong>{healthCalculated ? (openContradictions ?? 0) : "—"}</strong>
+          <strong>
+            {healthCalculated
+              ? openContradictions
+                ? `${openContradictions} to review`
+                : "None"
+              : "Not reviewed"}
+          </strong>
         </div>
         <div className="health-row">
           <span>
             <Check size={17} /> Procedure
           </span>
           <StatusBadge
-            status={procedure.data?.procedure?.status ?? "NOT_AVAILABLE"}
+            status={
+              procedure.data?.procedure?.status === "ACTIVE"
+                ? "READY"
+                : "NOT_AVAILABLE"
+            }
           />
         </div>
         <div className="health-row">
@@ -78,8 +94,7 @@ export function CaseHealth({ caseId }: { caseId: string }) {
       </div>
       {!healthCalculated ? (
         <p className="mt-4 text-xs leading-5 text-pencil-muted">
-          Readiness, gaps, and contradictions have not been calculated because
-          case analysis has not completed.
+          This summary will fill in after Recourse finishes reviewing the case.
         </p>
       ) : null}
       {requirements.isFetching || contradictions.isFetching ? (

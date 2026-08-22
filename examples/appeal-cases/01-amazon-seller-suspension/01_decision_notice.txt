@@ -1,0 +1,20 @@
+
+Subject: Notice of seller account suspension and temporary disbursement hold
+Seller: Northstar Home Goods LLC
+Marketplace: Amazon Marketplace
+Notice date: 2026-08-18
+Case reference: AMZ-2026-0818-441
+
+We have suspended the selling privileges for Northstar Home Goods LLC after a review of customer complaints concerning the authenticity of the product listed as “Northstar Stainless Steel Water Bottle, 750 ml.” The notice does not identify which customer order or unit was allegedly inauthentic.
+
+The notice states that disbursements may be held while the account review is open. It requests documentation that demonstrates the source and authenticity of inventory, including supplier invoices and information connecting the invoices to the affected inventory.
+
+The account owner states that all units of this product were purchased from the same authorized wholesale supplier and that the product listing used the manufacturer’s catalogue description. The account owner has not yet submitted an appeal through the authenticated seller portal.
+
+Important unknowns:
+- The notice does not identify the affected order IDs.
+- The notice does not state whether the concern relates to one unit, one shipment, or the whole ASIN.
+- No specific document format or exact submission deadline is included in this notice.
+
+Requested review outcome:
+Please review the attached source, purchase, and shipment records and restore selling privileges if the authenticity concern is resolved.

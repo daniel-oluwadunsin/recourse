@@ -12,8 +12,12 @@ import { type EnvironmentConfig } from "@recourse/config";
 
 import { OwnershipAuthorizationService } from "../../common/authorization/ownership.service";
 import { AIOperationService } from "../ai/ai-operation.service";
+import { AIProviderError } from "../ai/ai.types";
 import { hashInput } from "../ai/ai-operation.service";
-import { type CaseAnalysisOutput } from "../ai/operation-schemas";
+import {
+  type CaseAnalysisInput,
+  type CaseAnalysisOutput,
+} from "../ai/operation-schemas";
 import { CaseEventService } from "../cases/case-events.service";
 import { CaseStateMachineService } from "../cases/case-state-machine.service";
 import { Case } from "../cases/schemas/case.schema";
@@ -244,7 +248,31 @@ export class CaseIntelligenceService {
         text: item.eventText,
       })),
     };
-    const analysisResult = await this.ai.analyzeCase(analysisInput);
+    const providerAnalysisInput = shouldCompactAnalysisInput(analysisInput)
+      ? compactAnalysisInput(analysisInput)
+      : analysisInput;
+    let analysisResult;
+    try {
+      analysisResult = await this.ai.analyzeCase(providerAnalysisInput);
+    } catch (error: unknown) {
+      if (
+        !(error instanceof AIProviderError) ||
+        ![
+          "AI_INPUT_TOO_LARGE",
+          "GROQ_STRUCTURED_OUTPUT_REJECTED",
+          "PROVIDER_SCHEMA_MISMATCH",
+        ].includes(error.code)
+      ) {
+        throw error;
+      }
+      // Groq reports some context-window and structured-generation failures as
+      // HTTP 400 rather than 413. The operation-level schema retry has already
+      // run by this point, so retry once with a bounded, provenance-preserving
+      // view of the same durable case record.
+      analysisResult = await this.ai.analyzeCase(
+        compactAnalysisInput(analysisInput),
+      );
+    }
     const actionableInputRefs = new Set([
       ...analysisInput.requirements
         .filter((requirement) =>
@@ -407,7 +435,10 @@ export class CaseIntelligenceService {
       correlationId: actor.correlationId ?? null,
       evidenceId: null,
       expectedRevision: analysisCase.revision,
-      idempotencyKey: `analyze-case-${caseId}-${analysisCase.revision}-${inputHash}`,
+      // A user retry must not collide with an earlier completed/stale BullMQ
+      // job for the same durable revision. The request correlation id keeps a
+      // single HTTP attempt idempotent while allowing a later explicit retry.
+      idempotencyKey: `analyze-case-user-retry-${caseId}-${analysisCase.revision}-${actor.correlationId ?? inputHash}`,
       inputHash,
       operation: "analyze-case",
       workflowVersion: WORKFLOW_VERSION,
@@ -707,6 +738,38 @@ function targetFor(
     return "READY_TO_APPEAL";
   if (caseDocument.status === "CASE_ANALYSIS") return "EVIDENCE_COLLECTION";
   return "NEEDS_HUMAN";
+}
+
+function compactAnalysisInput(input: CaseAnalysisInput): CaseAnalysisInput {
+  return {
+    ...input,
+    claims: input.claims.slice(0, 10).map((claim) => ({
+      ...claim,
+      sourceRefs: claim.sourceRefs.slice(0, 4),
+      text: compactText(claim.text),
+    })),
+    contradictions: input.contradictions.slice(0, 4).map((item) => ({
+      ...item,
+      explanation: compactText(item.explanation),
+    })),
+    requirements: input.requirements.slice(0, 4).map((requirement) => ({
+      ...requirement,
+      text: compactText(requirement.text),
+    })),
+    timeline: input.timeline.slice(0, 6).map((event) => ({
+      ...event,
+      text: compactText(event.text),
+    })),
+  };
+}
+
+function shouldCompactAnalysisInput(input: CaseAnalysisInput): boolean {
+  return input.claims.length > 20 || JSON.stringify(input).length > 12_000;
+}
+
+function compactText(value: string): string {
+  const normalized = value.trim().replace(/\s+/gu, " ");
+  return normalized.length > 400 ? `${normalized.slice(0, 397)}…` : normalized;
 }
 
 function normalizeQuestion(value: string): string {

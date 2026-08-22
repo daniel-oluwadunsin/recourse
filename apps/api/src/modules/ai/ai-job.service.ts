@@ -153,6 +153,49 @@ export class AIJobService {
     }
   }
 
+  async markCaseAnalysisFailure(
+    payload: AIOperationJobPayload,
+    failureCode: string,
+  ): Promise<void> {
+    if (!payload.caseId || payload.expectedRevision === null) {
+      return;
+    }
+
+    const current = await this.caseModel
+      .findOne({
+        _id: new Types.ObjectId(payload.caseId),
+        deletedAt: null,
+      })
+      .exec();
+    if (
+      !current ||
+      current.status !== "CASE_ANALYSIS" ||
+      current.revision !== payload.expectedRevision
+    ) {
+      return;
+    }
+
+    await this.stateMachine.transition(
+      payload.caseId,
+      "NEEDS_HUMAN",
+      {
+        actorId: null,
+        actorType: "SYSTEM",
+        correlationId: payload.correlationId ?? undefined,
+      },
+      {
+        eventType: "CASE_NEEDS_HUMAN",
+        expectedCurrent: ["CASE_ANALYSIS"],
+        expectedRevision: current.revision,
+        idempotencyKey: `case-analysis-failed-${payload.caseId}-${current.revision}-${failureCode}`,
+        payload: {
+          failureCode: failureCode.slice(0, 100),
+          reason: "CASE_ANALYSIS_FAILED",
+        },
+      },
+    );
+  }
+
   private async analyzeResponse(
     payload: AIOperationJobPayload,
   ): Promise<unknown> {

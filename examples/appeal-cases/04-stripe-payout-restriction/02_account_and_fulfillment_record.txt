@@ -1,0 +1,20 @@
+
+BUSINESS AND FULFILLMENT RECORD
+Business: Brightline Studio Ltd.
+Platform account:account BL-STUDIO-042
+
+Business profile:
+- Service: website design and maintenance
+- Operating location: Lagos, Nigeria
+- Account owner: Amina Bello
+- Business registration reference: BIZ-88420
+
+Recent completed payments:
+- PAY-7001 — NGN 420,000 — website accessibility audit — delivered 2026-08-11.
+- PAY-7002 — NGN 680,000 — e-commerce redesign milestone — delivered 2026-08-15.
+- PAY-7003 — NGN 250,000 — monthly maintenance retainer — service period began 2026-08-18.
+
+The business retained project briefs, delivery confirmations, and client correspondence for each payment but has not uploaded those files to this test case.
+
+Open evidence gap:
+This record supports the stated business activity but does not independently prove the platform's internal reason for pausing payouts.

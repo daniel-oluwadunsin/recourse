@@ -11,6 +11,7 @@ import {
   procedureNeedsRefresh,
   snapshotContentHash,
 } from "./procedure.service";
+import { ProcedureService } from "./procedure.service";
 import { ProcedureQueryBuilderService } from "./procedure-query-builder.service";
 
 describe("procedural intelligence foundations", () => {
@@ -114,5 +115,44 @@ describe("procedural intelligence foundations", () => {
         "OUTPUT_PROVENANCE_INVALID",
       ),
     );
+  });
+
+  it("reuses a procedure version when a retry finds a partially persisted duplicate", async () => {
+    const existing = { _id: new Types.ObjectId(), version: 1 };
+    let contentLookupCount = 0;
+    const model = {
+      findOne(filter: Record<string, unknown>) {
+        if ("contentSha256" in filter) {
+          contentLookupCount += 1;
+          return {
+            exec: async () =>
+              contentLookupCount === 1 ? null : (existing as never),
+          };
+        }
+        return {
+          sort: () => ({ exec: async () => null }),
+        };
+      },
+      create: async () => {
+        const error = new Error("duplicate version");
+        Object.assign(error, { code: 11000 });
+        throw error;
+      },
+    };
+    type RecoveryService = {
+      procedureVersionModel: typeof model;
+      createOrReuseProcedureVersion: (
+        input: Record<string, unknown>,
+      ) => Promise<unknown>;
+    };
+    const service = Object.create(
+      ProcedureService.prototype,
+    ) as RecoveryService;
+
+    service.procedureVersionModel = model;
+    const result = await service.createOrReuseProcedureVersion({});
+
+    expect(result).toBe(existing);
+    expect(contentLookupCount).toBe(2);
   });
 });

@@ -1,0 +1,12 @@
+
+IDENTITY VERIFICATION RECEIPT
+Platform: Uber
+Account holder: Jordan Okafor
+Verification event reference: VERIFY-81142
+Verification started: 2026-08-11 08:14 WAT
+Verification completed: 2026-08-11 08:16 WAT
+Result shown to account holder: Verification completed
+
+The in-app receipt displayed the account holder name as Jordan Okafor and confirmed completion of the requested verification step. This record intentionally contains no government ID number, facial image, or other real identity document.
+
+The receipt was saved by the account holder on 2026-08-11 from the account security screen.

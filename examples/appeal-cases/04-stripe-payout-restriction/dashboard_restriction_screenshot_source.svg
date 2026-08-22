@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <rect width="1600" height="1000" fill="#f6f8fb"/>
+  <rect width="250" height="1000" fill="#172033"/>
+  <text x="42" y="72" fill="#ffffff" font-family="Arial, sans-serif" font-size="28" font-weight="700">Payments</text>
+  <text x="42" y="106" fill="#9eabc0" font-family="Arial, sans-serif" font-size="15">Brightline Studio Ltd.</text>
+  <g fill="#b7c3d6" font-family="Arial, sans-serif" font-size="20">
+    <text x="42" y="190">Overview</text>
+    <text x="42" y="245">Payments</text>
+    <text x="42" y="300">Customers</text>
+    <text x="42" y="355">Payouts</text>
+    <text x="42" y="410">Reports</text>
+  </g>
+  <rect x="24" y="330" width="202" height="48" rx="8" fill="#2f405d"/>
+  <text x="42" y="361" fill="#ffffff" font-family="Arial, sans-serif" font-size="20" font-weight="700">Payouts</text>
+  <text x="280" y="70" fill="#172033" font-family="Arial, sans-serif" font-size="30" font-weight="700">Payouts</text>
+  <text x="280" y="108" fill="#65738a" font-family="Arial, sans-serif" font-size="18">Brightline Studio Ltd. · Account BL-STUDIO-042</text>
+  <rect x="280" y="145" width="1260" height="150" rx="12" fill="#fff1d6" stroke="#e3a52f" stroke-width="3"/>
+  <circle cx="325" cy="205" r="22" fill="#e3a52f"/>
+  <text x="317" y="214" fill="#ffffff" font-family="Arial, sans-serif" font-size="26" font-weight="700">!</text>
+  <text x="370" y="193" fill="#4a3510" font-family="Arial, sans-serif" font-size="24" font-weight="700">Payouts paused</text>
+  <text x="370" y="230" fill="#5d4a24" font-family="Arial, sans-serif" font-size="18">Additional account information is required before payouts can resume.</text>
+  <text x="370" y="263" fill="#765f31" font-family="Arial, sans-serif" font-size="16">Opened: 19 Aug 2026 · Case: STR-2026-0819-318</text>
+  <text x="280" y="365" fill="#172033" font-family="Arial, sans-serif" font-size="21" font-weight="700">Current balance</text>
+  <text x="280" y="420" fill="#172033" font-family="Arial, sans-serif" font-size="46" font-weight="700">NGN 1,350,000</text>
+  <text x="280" y="455" fill="#65738a" font-family="Arial, sans-serif" font-size="17">Available balance</text>
+  <rect x="820" y="345" width="250" height="115" rx="10" fill="#ffffff" stroke="#d9e0ea" stroke-width="2"/>
+  <text x="850" y="382" fill="#65738a" font-family="Arial, sans-serif" font-size="17">Next payout</text>
+  <text x="850" y="422" fill="#172033" font-family="Arial, sans-serif" font-size="25" font-weight="700">Paused</text>
+  <rect x="1095" y="345" width="250" height="115" rx="10" fill="#ffffff" stroke="#d9e0ea" stroke-width="2"/>
+  <text x="1125" y="382" fill="#65738a" font-family="Arial, sans-serif" font-size="17">Review status</text>
+  <text x="1125" y="422" fill="#172033" font-family="Arial, sans-serif" font-size="25" font-weight="700">Information needed</text>
+  <text x="280" y="540" fill="#172033" font-family="Arial, sans-serif" font-size="23" font-weight="700">Review details</text>
+  <rect x="280" y="575" width="1260" height="190" rx="10" fill="#ffffff" stroke="#d9e0ea" stroke-width="2"/>
+  <text x="315" y="625" fill="#65738a" font-family="Arial, sans-serif" font-size="17">Reason</text>
+  <text x="570" y="625" fill="#172033" font-family="Arial, sans-serif" font-size="19">Additional account information required</text>
+  <line x1="315" y1="650" x2="1505" y2="650" stroke="#e5e9f0" stroke-width="2"/>
+  <text x="315" y="700" fill="#65738a" font-family="Arial, sans-serif" font-size="17">Action</text>
+  <text x="570" y="700" fill="#172033" font-family="Arial, sans-serif" font-size="19">Open the account review and provide requested information</text>
+  <text x="280" y="855" fill="#9aa6b8" font-family="Arial, sans-serif" font-size="15">Account dashboard · Brightline Studio Ltd.</text>
+</svg>
