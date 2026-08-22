@@ -70,6 +70,7 @@ export class Environment implements EnvironmentValues {
   JWT_ACCESS_TTL!: string;
   JWT_REFRESH_TTL!: string;
   GEMINI_API_KEY?: string;
+  GEMINI_API_KEYS!: string[];
   GEMINI_MODEL!: string;
   TAVILY_API_KEY?: string;
   CLOUDINARY_CLOUD_NAME?: string;
@@ -80,7 +81,26 @@ export class Environment implements EnvironmentValues {
 
   constructor(input: Record<string, unknown> = process.env) {
     Object.assign(this, validateEnvironment(input));
+    this.GEMINI_API_KEYS = collectGeminiApiKeys(input);
   }
+}
+
+export function collectGeminiApiKeys(input: Record<string, unknown>): string[] {
+  const candidates: Array<{ order: number; value: string }> = [];
+
+  for (const [name, rawValue] of Object.entries(input)) {
+    const match = /^GEMINI_API_KEY(?:_(\d+))?$/.exec(name);
+    if (!match || typeof rawValue !== 'string') continue;
+    const value = rawValue.trim();
+    if (!value) continue;
+
+    const order = match[1] ? Number.parseInt(match[1], 10) : 1;
+    if (!Number.isSafeInteger(order) || order < 1) continue;
+    candidates.push({ order, value });
+  }
+
+  candidates.sort((left, right) => left.order - right.order);
+  return [...new Set(candidates.map(({ value }) => value))];
 }
 
 export function validateEnvironment(

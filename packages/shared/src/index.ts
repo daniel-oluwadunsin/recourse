@@ -100,7 +100,7 @@ export const EvidenceExtractionSchema = z.object({
   language: z.string().nullable(),
   readable: z.boolean(),
   unreadableReason: z.string().nullable(),
-  facts: z.array(ExtractedFactSchema).max(50),
+  facts: z.array(ExtractedFactSchema).max(20),
 });
 export type EvidenceExtraction = z.infer<typeof EvidenceExtractionSchema>;
 
@@ -114,7 +114,7 @@ export const CaseAnalysisSchema = z.object({
         explanation: z.string(),
       }),
     )
-    .max(25),
+    .max(12),
   missingEvidence: z
     .array(
       z.object({
@@ -123,7 +123,7 @@ export const CaseAnalysisSchema = z.object({
         isOfficiallyRequired: z.boolean().nullable(),
       }),
     )
-    .max(15),
+    .max(10),
   contradictions: z
     .array(
       z.object({
@@ -133,10 +133,10 @@ export const CaseAnalysisSchema = z.object({
         questionForUser: z.string().nullable(),
       }),
     )
-    .max(15),
+    .max(10),
   timeline: z
     .array(z.object({ date: z.string().nullable(), event: z.string() }))
-    .max(30),
+    .max(20),
   readiness: z.enum(['needs_info', 'needs_evidence', 'ready']),
   recommendation: z.string(),
 });

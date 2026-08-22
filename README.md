@@ -52,6 +52,7 @@ The existing local `.env` is already ignored. Do not commit it.
 | `JWT_ACCESS_TTL`        | Access JWT lifetime; normally `15m`                           |
 | `JWT_REFRESH_TTL`       | Refresh JWT lifetime; normally `30d`                          |
 | `GEMINI_API_KEY`        | Gemini Developer API key                                      |
+| `GEMINI_API_KEY_2...N`  | Optional ordered Gemini fallback keys                         |
 | `GEMINI_MODEL`          | Structured multimodal model; currently `gemini-3.7-flash`     |
 | `TAVILY_API_KEY`        | Tavily Search and Extract key                                 |
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name                                         |
@@ -68,10 +69,13 @@ Environment parsing fails startup with invalid **variable names**, never their v
 
 1. Create or select a Google AI Studio project.
 2. Create an API key and set `GEMINI_API_KEY`.
-3. Leave `GEMINI_MODEL=gemini-3.7-flash` unless the account no longer exposes it.
-4. Verify availability with the [Gemini models documentation](https://ai.google.dev/gemini-api/docs/models) and [official JavaScript SDK guide](https://ai.google.dev/gemini-api/docs/libraries).
+3. Optionally add ordered fallbacks as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, and so on. Recourse rotates only after a rate-limit response.
+4. Leave `GEMINI_MODEL=gemini-3.7-flash` unless the account no longer exposes it.
+5. Verify availability with the [Gemini models documentation](https://ai.google.dev/gemini-api/docs/models) and [official JavaScript SDK guide](https://ai.google.dev/gemini-api/docs/libraries).
 
 Recourse uses structured JSON output and validates it with Zod. Images and scanned PDFs are sent inline only after versioned user consent. Google states that unpaid Gemini usage may be used to improve products and may be human-reviewed; the product discloses this before the first AI operation. See [Gemini pricing and data-use notes](https://ai.google.dev/gemini-api/docs/pricing) and the [Gemini API terms](https://ai.google.dev/gemini-api/terms).
+
+Gemini quotas are applied per Google project, not per API key. Fallback keys only provide additional quota capacity when they belong to projects with independent quotas.
 
 ### Tavily
 

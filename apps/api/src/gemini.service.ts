@@ -38,20 +38,104 @@ Separate document-supported facts, external procedural facts, user assertions, i
 Recourse researches, analyzes, and drafts. The user alone performs every external action.
 Stay within the supplied case. Return uncertainty or a focused missing-fact question when support is absent.`;
 
+interface GeminiKeySlot<TClient> {
+  client: TClient;
+  cooldownUntil: number;
+  lastQuotaError?: unknown;
+}
+
+export class GeminiKeyPool<TClient> {
+  private readonly slots: Array<GeminiKeySlot<TClient>>;
+  private activeIndex = 0;
+
+  constructor(
+    clients: TClient[],
+    private readonly onRateLimit: (index: number) => void = () => undefined,
+    private readonly now: () => number = Date.now,
+    private readonly sleep: (milliseconds: number) => Promise<void> = delay,
+    private readonly maximumAutomaticWaitMs = 65_000,
+  ) {
+    this.slots = clients.map((client) => ({ client, cooldownUntil: 0 }));
+  }
+
+  get size(): number {
+    return this.slots.length;
+  }
+
+  async execute<TResult>(
+    operation: (client: TClient) => Promise<TResult>,
+  ): Promise<TResult> {
+    let lastQuotaError: unknown;
+    let waitedForCapacity = false;
+
+    while (true) {
+      const checkedAt = this.now();
+      const startIndex = this.activeIndex;
+
+      for (let offset = 0; offset < this.slots.length; offset += 1) {
+        const index = (startIndex + offset) % this.slots.length;
+        const slot = this.slots[index];
+        if (!slot) continue;
+        if (slot.cooldownUntil > checkedAt) {
+          lastQuotaError ??= slot.lastQuotaError;
+          continue;
+        }
+
+        try {
+          const result = await operation(slot.client);
+          this.activeIndex = index;
+          return result;
+        } catch (error: unknown) {
+          if (!isGeminiRateLimitError(error)) throw error;
+          lastQuotaError = error;
+          slot.lastQuotaError = error;
+          slot.cooldownUntil = this.now() + geminiRetryDelayMs(error);
+          this.activeIndex = (index + 1) % this.slots.length;
+          this.onRateLimit(index);
+        }
+      }
+
+      const nextReadyAt = Math.min(
+        ...this.slots.map(({ cooldownUntil }) => cooldownUntil),
+      );
+      const waitMs = Math.max(nextReadyAt - this.now(), 0);
+      if (
+        !waitedForCapacity &&
+        waitMs > 0 &&
+        waitMs <= this.maximumAutomaticWaitMs
+      ) {
+        waitedForCapacity = true;
+        await this.sleep(waitMs + 100);
+        continue;
+      }
+
+      throw (
+        lastQuotaError ??
+        new AppError(
+          'AI_QUOTA_REACHED',
+          'We have reached the current AI usage limit. Nothing has been lost.',
+          429,
+          true,
+        )
+      );
+    }
+  }
+}
+
 @Injectable()
 export class GeminiService {
-  private readonly client: GoogleGenAI | null;
+  private readonly clientPool: GeminiKeyPool<GoogleGenAI>;
 
   constructor(@Inject(Environment) private readonly environment: Environment) {
-    this.client = environment.GEMINI_API_KEY
-      ? new GoogleGenAI({ apiKey: environment.GEMINI_API_KEY })
-      : null;
+    this.clientPool = new GeminiKeyPool(
+      environment.GEMINI_API_KEYS.map((apiKey) => new GoogleGenAI({ apiKey })),
+    );
   }
 
   understandCase(input: string): Promise<CaseUnderstanding> {
     return this.structured(
       CaseUnderstandingSchema,
-      `Understand this consequential institutional decision. Identify only supported facts and the smallest set of critical unknowns that blocks useful research. Do not classify it into a fixed domain.\n\nCASE INPUT:\n${bound(input)}`,
+      `Understand this consequential institutional decision. Identify only supported facts and the smallest set of critical unknowns that blocks useful research. Ask only for facts the user must personally supply and that cannot be found through procedural research or the uploaded decision. Do not ask the user for deadlines, filing methods, or other process rules that research should verify. Do not classify the case into a fixed domain.\n\nCASE INPUT:\n${bound(input)}`,
       'medium',
     );
   }
@@ -134,7 +218,7 @@ export class GeminiService {
     input: GeminiInput,
     thinkingLevel: ThinkingLevel,
   ): Promise<T> {
-    if (!this.client) {
+    if (this.clientPool.size === 0) {
       throw new AppError(
         'AI_NOT_CONFIGURED',
         'AI review is not configured yet.',
@@ -142,38 +226,41 @@ export class GeminiService {
         true,
       );
     }
-    const jsonSchema = z.toJSONSchema(schema);
+    const jsonSchema = toGeminiJsonSchema(schema);
     let lastValidationError = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const response = await this.client.interactions.create({
-          model: this.environment.GEMINI_MODEL,
-          store: false,
-          system_instruction: SYSTEM_INSTRUCTION,
-          input:
-            attempt === 0
-              ? input
-              : typeof input === 'string'
-                ? `${input}\n\nYour prior response failed validation. Return only JSON that exactly matches the schema.`
-                : [
-                    ...input,
-                    {
-                      type: 'text',
-                      text: 'Your prior response failed validation. Return only JSON that exactly matches the schema.',
-                    },
-                  ],
-          generation_config: {
-            thinking_level: thinkingLevel,
-            thinking_summaries: 'none',
-            max_output_tokens: 8_192,
-          },
-          response_format: {
-            type: 'text',
-            mime_type: 'application/json',
-            schema: jsonSchema,
-          },
-        });
+        const response = await this.clientPool.execute((client) =>
+          client.interactions.create({
+            model: this.environment.GEMINI_MODEL,
+            store: false,
+            system_instruction: SYSTEM_INSTRUCTION,
+            input:
+              attempt === 0
+                ? input
+                : typeof input === 'string'
+                  ? `${input}\n\nYour prior response failed validation. Return only JSON that exactly matches the schema.`
+                  : [
+                      ...input,
+                      {
+                        type: 'text',
+                        text: 'Your prior response failed validation. Return only JSON that exactly matches the schema.',
+                      },
+                    ],
+            generation_config: {
+              thinking_level: thinkingLevel,
+              thinking_summaries: 'none',
+              max_output_tokens: 8_192,
+            },
+            response_format: {
+              type: 'text',
+              mime_type: 'application/json',
+              schema: jsonSchema,
+            },
+          }),
+        );
         const parsedJson: unknown = JSON.parse(response.output_text ?? '');
+        console.log(parsedJson);
         const parsed = schema.safeParse(parsedJson);
         if (parsed.success) return parsed.data;
         lastValidationError = true;
@@ -182,6 +269,7 @@ export class GeminiService {
           lastValidationError = true;
           continue;
         }
+        console.log(mapGeminiError(error))
         throw mapGeminiError(error);
       }
     }
@@ -206,12 +294,31 @@ function boundJson(value: unknown, maximum = 100_000): string {
   return bound(JSON.stringify(value), maximum);
 }
 
+export function toGeminiJsonSchema(
+  schema: z.ZodType,
+): z.core.JSONSchema.BaseSchema {
+  return capGeminiArrayBounds(
+    z.toJSONSchema(schema),
+  ) as z.core.JSONSchema.BaseSchema;
+}
+
+function capGeminiArrayBounds(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(capGeminiArrayBounds);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      key === 'maxItems' && typeof child === 'number'
+        ? Math.min(child, 20)
+        : capGeminiArrayBounds(child),
+    ]),
+  );
+}
+
 function mapGeminiError(error: unknown): AppError {
-  const candidate = error as { status?: number; message?: string };
-  if (
-    candidate.status === 429 ||
-    candidate.message?.includes('RESOURCE_EXHAUSTED')
-  ) {
+  if (error instanceof AppError) return error;
+  if (isGeminiRateLimitError(error)) {
     return new AppError(
       'AI_QUOTA_REACHED',
       'We have reached the current AI usage limit. Nothing has been lost.',
@@ -225,4 +332,33 @@ function mapGeminiError(error: unknown): AppError {
     503,
     true,
   );
+}
+
+export function isGeminiRateLimitError(error: unknown): boolean {
+  const candidate = error as {
+    status?: number | string;
+    code?: number | string;
+    message?: string;
+  };
+  return (
+    candidate.status === 429 ||
+    candidate.code === 429 ||
+    candidate.status === 'RESOURCE_EXHAUSTED' ||
+    candidate.code === 'RESOURCE_EXHAUSTED' ||
+    candidate.message?.includes('RESOURCE_EXHAUSTED') === true
+  );
+}
+
+function geminiRetryDelayMs(error: unknown): number {
+  const candidate = error as { message?: string };
+  const match = candidate.message?.match(
+    /(?:retryDelay|retry in)[^0-9]*(\d+(?:\.\d+)?)s/i,
+  );
+  const retrySeconds = match?.[1];
+  const seconds = retrySeconds ? Number.parseFloat(retrySeconds) : 60;
+  return Math.min(Math.max(seconds * 1_000, 1_000), 86_400_000);
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

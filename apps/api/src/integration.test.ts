@@ -2,6 +2,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { getConnectionToken } from '@nestjs/mongoose';
+import { createConnection, type Connection } from 'mongoose';
 import request from 'supertest';
 import type { Response } from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -209,6 +211,18 @@ describe('Recourse API lifecycle', () => {
 
   beforeAll(async () => {
     mongo = await MongoMemoryServer.create();
+    const legacyConnection = await createConnection(mongo.getUri(), {
+      dbName: 'recourse_test',
+    }).asPromise();
+    await legacyConnection.collection('cases').createIndex(
+      { caseKey: 1 },
+      {
+        name: 'cases_case_key_unique',
+        unique: true,
+      },
+    );
+    await legacyConnection.close();
+
     const environment = new Environment({
       NODE_ENV: 'test',
       MONGODB_URI: mongo.getUri(),
@@ -245,6 +259,14 @@ describe('Recourse API lifecycle', () => {
   afterAll(async () => {
     await app?.close();
     await mongo?.stop();
+  });
+
+  it('removes the obsolete unique caseKey index during startup', async () => {
+    const connection = app.get<Connection>(getConnectionToken());
+    const indexes = await connection.collection('cases').listIndexes().toArray();
+    expect(indexes.map((index) => index.name)).not.toContain(
+      'cases_case_key_unique',
+    );
   });
 
   it('isolates users and completes intake through response continuation', async () => {

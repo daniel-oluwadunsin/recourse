@@ -22,6 +22,7 @@ import {
   UserRecord,
   UserSchema,
 } from './database.schemas';
+import { DatabaseMaintenanceService } from './database-maintenance.service';
 import { DocumentsController, DocumentsService } from './documents.service';
 import {
   CloudinaryService,
@@ -77,6 +78,7 @@ class HealthController {
     AccessGuard,
     AuthService,
     CasesService,
+    DatabaseMaintenanceService,
     DocumentsService,
     CloudinaryService,
     DocumentExtractionService,
