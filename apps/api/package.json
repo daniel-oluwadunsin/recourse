@@ -4,9 +4,9 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "dev": "nest start --watch",
-    "build": "pnpm --filter @recourse/shared build && nest build",
-    "start": "node dist/main.js",
+    "dev": "node init && nest start --watch",
+    "build": "node init && pnpm --filter @recourse/shared build && nest build",
+    "start": "node init && node dist/main.js",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
