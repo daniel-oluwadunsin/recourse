@@ -23,6 +23,15 @@ import { AppError } from './common';
 import { Environment } from './config';
 
 type ThinkingLevel = 'low' | 'medium';
+export type GeminiCapacityKind = 'quota' | 'rate_limit';
+
+export interface GeminiCapacityDetails {
+  kind: GeminiCapacityKind;
+  status?: number;
+  code?: string;
+  retryAfterMs?: number;
+}
+
 type GeminiInput =
   | string
   | Array<
@@ -41,7 +50,7 @@ Stay within the supplied case. Return uncertainty or a focused missing-fact ques
 interface GeminiKeySlot<TClient> {
   client: TClient;
   cooldownUntil: number;
-  lastQuotaError?: unknown;
+  lastCapacityError?: unknown;
 }
 
 export class GeminiKeyPool<TClient> {
@@ -50,7 +59,10 @@ export class GeminiKeyPool<TClient> {
 
   constructor(
     clients: TClient[],
-    private readonly onRateLimit: (index: number) => void = () => undefined,
+    private readonly onCapacityError: (
+      index: number,
+      details: GeminiCapacityDetails,
+    ) => void = () => undefined,
     private readonly now: () => number = Date.now,
     private readonly sleep: (milliseconds: number) => Promise<void> = delay,
     private readonly maximumAutomaticWaitMs = 65_000,
@@ -65,8 +77,9 @@ export class GeminiKeyPool<TClient> {
   async execute<TResult>(
     operation: (client: TClient) => Promise<TResult>,
   ): Promise<TResult> {
-    let lastQuotaError: unknown;
+    let lastCapacityError: unknown;
     let waitedForCapacity = false;
+    const quotaExhausted = new Set<number>();
 
     while (true) {
       const checkedAt = this.now();
@@ -76,8 +89,9 @@ export class GeminiKeyPool<TClient> {
         const index = (startIndex + offset) % this.slots.length;
         const slot = this.slots[index];
         if (!slot) continue;
+        if (quotaExhausted.has(index)) continue;
         if (slot.cooldownUntil > checkedAt) {
-          lastQuotaError ??= slot.lastQuotaError;
+          lastCapacityError ??= slot.lastCapacityError;
           continue;
         }
 
@@ -86,17 +100,28 @@ export class GeminiKeyPool<TClient> {
           this.activeIndex = index;
           return result;
         } catch (error: unknown) {
-          if (!isGeminiRateLimitError(error)) throw error;
-          lastQuotaError = error;
-          slot.lastQuotaError = error;
-          slot.cooldownUntil = this.now() + geminiRetryDelayMs(error);
+          const capacity = classifyGeminiCapacityError(error);
+          if (!capacity) throw error;
+          lastCapacityError = error;
+          slot.lastCapacityError = error;
+          if (capacity.kind === 'quota') {
+            // A project-level quota is not repaired by immediately retrying
+            // the same credential during this operation. Continue with the
+            // remaining independent projects instead.
+            quotaExhausted.add(index);
+            slot.cooldownUntil = this.now();
+          } else {
+            slot.cooldownUntil = this.now() + (capacity.retryAfterMs ?? 60_000);
+          }
           this.activeIndex = (index + 1) % this.slots.length;
-          this.onRateLimit(index);
+          this.onCapacityError(index, capacity);
         }
       }
 
       const nextReadyAt = Math.min(
-        ...this.slots.map(({ cooldownUntil }) => cooldownUntil),
+        ...this.slots
+          .filter((_, index) => !quotaExhausted.has(index))
+          .map(({ cooldownUntil }) => cooldownUntil),
       );
       const waitMs = Math.max(nextReadyAt - this.now(), 0);
       if (
@@ -110,7 +135,7 @@ export class GeminiKeyPool<TClient> {
       }
 
       throw (
-        lastQuotaError ??
+        lastCapacityError ??
         new AppError(
           'AI_QUOTA_REACHED',
           'We have reached the current AI usage limit. Nothing has been lost.',
@@ -129,6 +154,15 @@ export class GeminiService {
   constructor(@Inject(Environment) private readonly environment: Environment) {
     this.clientPool = new GeminiKeyPool(
       environment.GEMINI_API_KEYS.map((apiKey) => new GoogleGenAI({ apiKey })),
+      (index, details) => {
+        console.warn('Gemini capacity fallback', {
+          keySlot: index + 1,
+          category: details.kind,
+          status: details.status ?? null,
+          providerCode: details.code ?? null,
+          retryAfterMs: details.retryAfterMs ?? null,
+        });
+      },
     );
   }
 
@@ -260,7 +294,6 @@ export class GeminiService {
           }),
         );
         const parsedJson: unknown = JSON.parse(response.output_text ?? '');
-        console.log(parsedJson);
         const parsed = schema.safeParse(parsedJson);
         if (parsed.success) return parsed.data;
         lastValidationError = true;
@@ -269,7 +302,7 @@ export class GeminiService {
           lastValidationError = true;
           continue;
         }
-        console.log(mapGeminiError(error))
+        console.error('Gemini request failed', summarizeGeminiError(error));
         throw mapGeminiError(error);
       }
     }
@@ -316,9 +349,9 @@ function capGeminiArrayBounds(value: unknown): unknown {
   );
 }
 
-function mapGeminiError(error: unknown): AppError {
+export function mapGeminiError(error: unknown): AppError {
   if (error instanceof AppError) return error;
-  if (isGeminiRateLimitError(error)) {
+  if (classifyGeminiCapacityError(error)) {
     return new AppError(
       'AI_QUOTA_REACHED',
       'We have reached the current AI usage limit. Nothing has been lost.',
@@ -335,28 +368,149 @@ function mapGeminiError(error: unknown): AppError {
 }
 
 export function isGeminiRateLimitError(error: unknown): boolean {
-  const candidate = error as {
-    status?: number | string;
-    code?: number | string;
-    message?: string;
-  };
-  return (
-    candidate.status === 429 ||
-    candidate.code === 429 ||
-    candidate.status === 'RESOURCE_EXHAUSTED' ||
-    candidate.code === 'RESOURCE_EXHAUSTED' ||
-    candidate.message?.includes('RESOURCE_EXHAUSTED') === true
-  );
+  return classifyGeminiCapacityError(error)?.kind === 'rate_limit';
 }
 
-function geminiRetryDelayMs(error: unknown): number {
-  const candidate = error as { message?: string };
-  const match = candidate.message?.match(
-    /(?:retryDelay|retry in)[^0-9]*(\d+(?:\.\d+)?)s/i,
+export function classifyGeminiCapacityError(
+  error: unknown,
+): GeminiCapacityDetails | null {
+  const records = errorRecords(error);
+  const statusValues = records.flatMap((record) =>
+    ['status', 'statusCode'].flatMap((key) => {
+      const value = record[key];
+      return typeof value === 'string' || typeof value === 'number'
+        ? [value]
+        : [];
+    }),
   );
-  const retrySeconds = match?.[1];
-  const seconds = retrySeconds ? Number.parseFloat(retrySeconds) : 60;
-  return Math.min(Math.max(seconds * 1_000, 1_000), 86_400_000);
+  const codeValues = records.flatMap((record) => {
+    const value = record.code;
+    return typeof value === 'string' || typeof value === 'number'
+      ? [value]
+      : [];
+  });
+  const text = records
+    .flatMap((record) =>
+      ['message', 'detail', 'status', 'statusCode', 'code', 'body'].flatMap(
+        (key) => {
+          const value = record[key];
+          return typeof value === 'string' || typeof value === 'number'
+            ? [String(value)]
+            : [];
+        },
+      ),
+    )
+    .join(' ');
+  const normalizedCodes = codeValues.map((value) =>
+    String(value).toLowerCase(),
+  );
+  const has429 =
+    statusValues.some((value) => Number(value) === 429) ||
+    codeValues.some((value) => Number(value) === 429) ||
+    /\b429\b/.test(text);
+  const hasQuotaSignal =
+    /\bcurrent\s+quota\b/i.test(text) ||
+    /\bquota\b[\s\S]{0,100}\b(?:exceed|reach|limit)/i.test(text) ||
+    /\b(?:exceed|reach)\w*\b[\s\S]{0,100}\b(?:quota|usage limit)/i.test(text) ||
+    /generate_content_[a-z0-9_]*free_tier_[a-z0-9_]*/i.test(text);
+  const hasResourceExhaustedSignal =
+    normalizedCodes.some((value) => value === 'resource_exhausted') ||
+    /resource_exhausted/i.test(text);
+  const hasRateLimitSignal =
+    normalizedCodes.some(
+      (value) =>
+        value === 'rate_limit_exceeded' || value === 'too_many_requests',
+    ) || /rate[\s_-]*limit|too many requests/i.test(text);
+
+  if (
+    !has429 &&
+    !hasQuotaSignal &&
+    !hasResourceExhaustedSignal &&
+    !hasRateLimitSignal
+  )
+    return null;
+
+  const kind: GeminiCapacityKind =
+    hasQuotaSignal || hasResourceExhaustedSignal ? 'quota' : 'rate_limit';
+  const status = statusValues
+    .map((value) => Number(value))
+    .find((value) => Number.isFinite(value));
+  const code = [...codeValues, ...statusValues]
+    .map((value) => String(value).trim())
+    .find((value) => value.length > 0 && !/^\d+$/.test(value));
+  const retryAfterMs = parseGeminiRetryDelayMs(text);
+
+  return {
+    kind,
+    ...(status === undefined ? {} : { status }),
+    ...(code === undefined ? {} : { code }),
+    ...(retryAfterMs === undefined && kind === 'rate_limit'
+      ? { retryAfterMs: 60_000 }
+      : retryAfterMs === undefined
+        ? {}
+        : { retryAfterMs }),
+  };
+}
+
+function summarizeGeminiError(error: unknown): Record<string, unknown> {
+  const capacity = classifyGeminiCapacityError(error);
+  const records = errorRecords(error);
+  const status = records
+    .flatMap((record) => [record.status, record.statusCode])
+    .map((value) => Number(value))
+    .find((value) => Number.isFinite(value));
+  const code = records
+    .map((record) => record.code)
+    .find((value) => typeof value === 'string' || typeof value === 'number');
+  return {
+    name: error instanceof Error ? error.name : 'UnknownError',
+    status: status ?? null,
+    providerCode: code === undefined ? null : String(code).slice(0, 80),
+    category: capacity?.kind ?? 'other',
+    retryAfterMs: capacity?.retryAfterMs ?? null,
+  };
+}
+
+function errorRecords(error: unknown): Array<Record<string, unknown>> {
+  const root = asRecord(error);
+  if (!root) return [];
+  const records = [root];
+  const candidates = [root.error, root.data$, root.body];
+  for (const candidate of candidates) {
+    const record = asRecord(candidate) ?? parseJsonRecord(candidate);
+    if (record) records.push(record);
+    if (record) {
+      const nestedError = asRecord(record.error);
+      if (nestedError) records.push(nestedError);
+    }
+  }
+  return records;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'string' || value.length > 20_000) return null;
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function parseGeminiRetryDelayMs(value: string): number | undefined {
+  const match = value.match(
+    /(?:retryDelay|retry(?:\s+after|\s+in)?)[^0-9]*(\d+(?:\.\d+)?)\s*(ms|s|m)?/i,
+  );
+  if (!match?.[1]) return undefined;
+  const amount = Number.parseFloat(match[1]);
+  const unit = match[2]?.toLowerCase();
+  const multiplier = unit === 'ms' ? 1 : unit === 'm' ? 60_000 : 1_000;
+  return Math.min(Math.max(amount * multiplier, 1_000), 86_400_000);
 }
 
 function delay(milliseconds: number): Promise<void> {

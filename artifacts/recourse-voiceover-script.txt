@@ -1,0 +1,61 @@
+Recourse is an AI case-intelligence agent for difficult institutional decisions. It starts with what happened, understands the record, and helps find a grounded next step.
+
+The flow is simple: bring the decision, see the whole case, and choose what fits.
+
+Recourse researches, analyzes, and drafts while I stay in control of every action outside the product.
+
+I’ll create a private casebook, keeping the decision, evidence, drafts, and history together in one place.
+
+The casebook is private and starts empty. Once I’m in, I can bring in the first case.
+
+There are no cases yet, so I open a new case and begin with the facts.
+
+I can paste the decision, quote a message, or describe it in my own words. I enter the key facts: on 21 August 2026, Northbridge denied a cardiac MRI authorization because the prerequisite echocardiogram was missing. I request an expedited appeal.
+
+The portal shows reference NBH-PA-77103 and an echocardiogram marked received on 18 August at 9:14 AM. That timestamp matters.
+
+The denial is dated 21 August. It says coverage was denied because the prerequisite echocardiogram report was missing from the review file.
+
+Then I review the cardiologist’s letter. Dr. Priya Shah says the echocardiogram was completed on 15 July, uploaded on 18 August, and shown as received in the portal. The letter explains why a standard review could affect the patient’s health.
+
+Now I return to Recourse. The case is saved, and its workspace is ready for the record.
+
+Across the workspace are Overview, Evidence, Process, Ask Recourse, Drafts, and Activity. I check the Evidence tab first, where the file table is still empty.
+
+I add the documents one at a time. First, I choose the original decision. Then I add the cardiologist’s medical-necessity letter as supporting evidence. Finally, I add the authorization portal receipt. The table keeps the decision separate from supporting records, labels each file, and stores them with the case. That separation matters because the denial is the institution’s account, while the portal and letter provide context that may challenge it. I’m building a record that can be checked, compared, and extended if a new response arrives.
+
+Before the first review, Recourse shows a clear privacy note. I acknowledge it and continue. The agent reads the decision, checks essential details, researches the current process, and makes each stage visible while the case is prepared.
+
+Rather than guessing, Recourse asks for the health plan’s jurisdiction. That matters because appeal rules can depend on where the plan is issued or located. I enter Delaware and save the answer, adding the missing context to the case.
+
+Next, it asks whether I have the echocardiogram and a portal receipt showing it was received on 18 August. I confirm that both are available for this case.
+
+Recourse saves that answer and continues checking the case. The interface shows what is complete and what it is still researching. After that review, it asks one final question about urgency: whether Dr. Shah has provided a written statement explaining why a standard appeal timeframe could jeopardize the patient’s health. I pause here to answer that last, case-specific question.
+
+I confirm that the clinician’s statement is available. That gives Recourse the three pieces it needed: the jurisdiction, the evidence that the missing report was received, and the medical reason an expedited review may be necessary. I save the answer and let the agent finish.
+
+The case is ready. Recourse summarizes what happened, keeps the denial reason visible, and flags possible appeal timing. It also reminds me to consider qualified support because this is an urgent medical decision. The product organizes the information without promising an outcome.
+
+Scrolling down, I can see what Recourse found and the recommended next step. The evidence suggests the echocardiogram was received before the denial, and the recommendation is to submit an expedited internal appeal with the letter, receipt, and report, then request a decision within 72 hours, based on the record in front of me.
+
+Now I open Ask Recourse. This is a case-aware place to ask questions in plain language. I type, “What day was I supposed to do that if I was denied?” I want to know which date matters and what I should do next. The question stays attached to this case, so the answer can use its dates and documents.
+
+The answer identifies the denial date, then connects it to the echocardiogram’s earlier completion and portal receipt. It highlights why that receipt matters.
+
+From Drafts, I prepare a professional email grounded in the case, bringing the reference, denial, evidence, and expedited request into one reviewable message.
+
+I can copy it, review it, and change the wording before using it. Recourse has prepared the message; it has not sent anything.
+
+I switch to a formal letter and ask Recourse to draft it. The letter follows the same facts, but presents them clearly in a formal format for the recipient to review.
+
+Here is the letter preview. It names the urgent prior-authorization appeal, explains the missing-report contradiction, cites the portal receipt, and includes the cardiologist’s medical-necessity statement. It keeps the request clear and traceable. I can read through the full draft, download it as a PDF, and complete the visible placeholders for the recipient and my own address before I use it.
+
+After I take the action myself, I record what I submitted. I choose the channel, confirm the date, add a reference if I have one, and say whether I used a Recourse draft unchanged, edited it, or sent something different.
+
+Now I’m waiting for a response. When one arrives, I bring it back into the same case and paste it exactly. Recourse will compare what they said with the exact submission I recorded. That lets the next step follow the evidence and the response, with a clear record of what happened. This keeps the full exchange traceable and makes the next review easier to act on.
+
+The response is reviewed against the case record. Recourse checks what changed and prepares a grounded next step. The submission is recorded, and the history now includes the response review.
+
+Finally, Activity shows the complete case history: evidence, drafts, submission, and response review. I can follow it from here.
+
+The case is resolved, and the full history stays here.

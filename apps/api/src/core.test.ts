@@ -11,7 +11,12 @@ import {
   researchCacheKey,
 } from './research.service';
 import { validateFile } from './documents.service';
-import { GeminiKeyPool, toGeminiJsonSchema } from './gemini.service';
+import {
+  classifyGeminiCapacityError,
+  GeminiKeyPool,
+  mapGeminiError,
+  toGeminiJsonSchema,
+} from './gemini.service';
 import { CaseAnalysisSchema, EvidenceExtractionSchema } from '@recourse/shared';
 
 const baseEnvironment = {
@@ -125,6 +130,158 @@ describe('Gemini credential failover', () => {
       }),
     ).rejects.toMatchObject({ status: 429 });
     expect(waits).toBe(1);
+  });
+
+  it('recognizes quota and rate-limit error shapes from the Gemini SDK', () => {
+    expect(classifyGeminiCapacityError({ status: 429 })).toMatchObject({
+      kind: 'rate_limit',
+      status: 429,
+    });
+    expect(classifyGeminiCapacityError({ statusCode: '429' })).toMatchObject({
+      kind: 'rate_limit',
+      status: 429,
+    });
+    expect(
+      classifyGeminiCapacityError({
+        statusCode: 429,
+        error: { code: 'rate_limit_exceeded', message: 'Please retry in 2s' },
+      }),
+    ).toMatchObject({
+      kind: 'rate_limit',
+      status: 429,
+      code: 'rate_limit_exceeded',
+      retryAfterMs: 2_000,
+    });
+    expect(
+      classifyGeminiCapacityError({
+        message:
+          'Quota exceeded for metric: generate_content_free_tier_requests',
+      }),
+    ).toMatchObject({ kind: 'quota' });
+    expect(
+      classifyGeminiCapacityError({
+        message: 'The current quota is exhausted.',
+      }),
+    ).toMatchObject({ kind: 'quota' });
+    expect(
+      classifyGeminiCapacityError({
+        body: JSON.stringify({
+          error: { code: 'rate_limit_exceeded', message: 'Try again later' },
+        }),
+      }),
+    ).toMatchObject({ kind: 'rate_limit', code: 'rate_limit_exceeded' });
+    expect(
+      classifyGeminiCapacityError({ message: 'RESOURCE_EXHAUSTED' }),
+    ).toMatchObject({ kind: 'quota' });
+  });
+
+  it('falls back when a credential reaches a project quota', async () => {
+    const calls: string[] = [];
+    const capacityEvents: number[] = [];
+    const pool = new GeminiKeyPool(['project-a', 'project-b'], (index) =>
+      capacityEvents.push(index),
+    );
+
+    const result = await pool.execute(async (client) => {
+      calls.push(client);
+      if (client === 'project-a') {
+        throw {
+          message:
+            'Quota exceeded for metric: generate_content_free_tier_requests',
+        };
+      }
+      return 'ok';
+    });
+
+    expect(result).toBe('ok');
+    expect(calls).toEqual(['project-a', 'project-b']);
+    expect(capacityEvents).toEqual([0]);
+  });
+
+  it('returns the last capacity error after every credential is exhausted', async () => {
+    const pool = new GeminiKeyPool(
+      ['project-a', 'project-b'],
+      () => undefined,
+      Date.now,
+      async () => undefined,
+      0,
+    );
+    const quotaError = {
+      statusCode: 429,
+      error: { code: 'rate_limit_exceeded' },
+    };
+
+    await expect(
+      pool.execute(async () => {
+        throw quotaError;
+      }),
+    ).rejects.toBe(quotaError);
+    expect(mapGeminiError(quotaError)).toMatchObject({
+      code: 'AI_QUOTA_REACHED',
+      status: 429,
+      retryable: true,
+    });
+  });
+
+  it.each([400, 401, 403, 503])(
+    'does not fall back for unrelated provider status %s',
+    async (status) => {
+      const calls: string[] = [];
+      const pool = new GeminiKeyPool(['primary', 'secondary']);
+
+      await expect(
+        pool.execute(async (client) => {
+          calls.push(client);
+          throw { status };
+        }),
+      ).rejects.toMatchObject({ status });
+      expect(calls).toEqual(['primary']);
+    },
+  );
+
+  it('does not wait again for project quota exhaustion', async () => {
+    let waits = 0;
+    const pool = new GeminiKeyPool(
+      ['project-a'],
+      () => undefined,
+      Date.now,
+      async () => {
+        waits += 1;
+      },
+    );
+
+    await expect(
+      pool.execute(async () => {
+        throw { message: 'You exceeded your current quota.' };
+      }),
+    ).rejects.toMatchObject({ message: 'You exceeded your current quota.' });
+    expect(waits).toBe(0);
+  });
+
+  it('bounds retry delays and only waits once for rate limits', async () => {
+    expect(
+      classifyGeminiCapacityError({
+        status: 429,
+        message: 'Please retry in 999999999s',
+      }),
+    ).toMatchObject({ retryAfterMs: 86_400_000 });
+
+    let waits = 0;
+    const pool = new GeminiKeyPool(
+      ['primary'],
+      () => undefined,
+      () => 1_000,
+      async () => {
+        waits += 1;
+      },
+      0,
+    );
+    await expect(
+      pool.execute(async () => {
+        throw { status: 429, message: 'Please retry in 999999999s' };
+      }),
+    ).rejects.toMatchObject({ status: 429 });
+    expect(waits).toBe(0);
   });
 });
 
