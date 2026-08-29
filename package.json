@@ -7,7 +7,7 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "dotenv -e .env -- concurrently -k -n api,web -c blue,red \"pnpm --filter api dev\" \"pnpm --filter web dev\"",
+    "dev": "node api.js && dotenv -e .env -- concurrently -k -n api,web -c blue,red \"pnpm --filter api dev\" \"pnpm --filter web dev\"",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
@@ -15,7 +15,7 @@
     "test:e2e": "playwright test",
     "test:providers": "TSX_TSCONFIG_PATH=apps/api/tsconfig.json node --env-file=.env --import tsx apps/api/scripts/provider-smoke.ts",
     "build": "pnpm --filter @recourse/shared build && pnpm --filter api build && pnpm --filter web build",
-    "start": "dotenv -e .env -- concurrently -k -n api,web -c blue,red \"pnpm --filter api start\" \"pnpm --filter web start\"",
+    "start": "node api.js && dotenv -e .env -- concurrently -k -n api,web -c blue,red \"pnpm --filter api start\" \"pnpm --filter web start\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
